@@ -44,6 +44,8 @@ export const config = {
   poolOffers: new Set((process.env.POOL_OFFERS ?? "").split(",").map((id) => id.trim()).filter(Boolean)),
   /** How often pools are refilled and checked, and untracked workers destroyed. */
   sweepIntervalMs: 60_000,
+  /** Cold forks have taken 30 to 50 s under load; leave room before giving up and refunding. */
+  forkReadyTimeoutMs: 180_000,
   /** After CreateOS refuses a fork for quota or credit reasons, pools stop forking for this long. */
   forkBackoffMs: 2 * 60_000,
   /** Workers the gateway created and has not destroyed, kept on disk so a crash leaves nothing behind after the next start. */

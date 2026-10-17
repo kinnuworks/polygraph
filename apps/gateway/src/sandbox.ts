@@ -41,7 +41,7 @@ export async function forkWorker(parentSandboxId: string): Promise<Sandbox> {
   const worker = await parent.fork({});
   trackWorker(worker.id);
   try {
-    await worker.waitUntilRunning({ timeoutMs: 60_000 });
+    await worker.waitUntilRunning({ timeoutMs: config.forkReadyTimeoutMs });
     // A parent with idle auto-pause would pass it on; a worker must stay running until it is used.
     if (worker.data.auto_pause_after_seconds) await worker.setAutoPause(null);
   } catch (err) {
