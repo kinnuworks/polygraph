@@ -49,6 +49,11 @@ function replayFrom(lastEventId: string | undefined): StoredEvent[] {
 
 export function registerEventRoutes(app: Hono): void {
   app.post("/events", bodyLimit({ maxSize: 1024 * 1024 }), async (c) => {
+    // The feed is public to read; only our own agents may write to it when a token is configured.
+    const expected = process.env.EVENTS_TOKEN;
+    if (expected && c.req.header("x-polygraph-events-token") !== expected) {
+      return c.json({ error: "missing or wrong events token" }, 401);
+    }
     let body: unknown;
     try {
       body = await c.req.json();

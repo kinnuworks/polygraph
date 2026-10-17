@@ -11,7 +11,7 @@ export function describe(event: PolygraphEvent): string {
     case "seller.test":
       return `tests: ${event.passed} passed, ${event.failed} failed`;
     case "seller.patch":
-      return `patched ${event.file}`;
+      return `patched ${event.file}${event.model ? ` (written by ${event.model})` : ""}`;
     case "seller.attack":
       return `${event.attack}: ${event.status}${event.detail ? ` · ${event.detail}` : ""}`;
     case "offer.published":
@@ -42,7 +42,10 @@ export async function emit(event: Payload<PolygraphEvent>): Promise<void> {
   try {
     await fetch(`${gateway}/events`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        ...(process.env.EVENTS_TOKEN ? { "x-polygraph-events-token": process.env.EVENTS_TOKEN } : {}),
+      },
       body: JSON.stringify(full),
     });
   } catch {
