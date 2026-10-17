@@ -16,6 +16,8 @@ export function describe(event: PolygraphEvent): string {
       return `${event.attack}: ${event.status}${event.detail ? ` · ${event.detail}` : ""}`;
     case "offer.published":
       return `published ${event.offer.manifest.offerId} (${event.offer.manifest.name})`;
+    case "offer.removed":
+      return `removed ${event.offerId}`;
     case "buyer.check":
       return `${event.check.status.toUpperCase()} ${event.check.label}${event.check.detail ? ` · ${event.check.detail}` : ""}`;
     case "buyer.refused":

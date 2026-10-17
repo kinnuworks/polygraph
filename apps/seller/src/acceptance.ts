@@ -2,7 +2,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Sandbox } from "@nodeops-createos/sandbox";
-import { TOOL_DIR, emit, type CheckResult } from "@polygraph/core";
+import { TOOL_DIR, acceptanceSuiteDigest, acceptanceSuiteDigestCommand, emit, type AcceptanceRecord, type CheckResult } from "@polygraph/core";
 import { ENGINEER_SYSTEM, testAndFix, type Workspace } from "./build.js";
 import { HARDEN_BRIEF } from "./harden.js";
 import { askForFiles } from "./llm.js";
@@ -34,10 +34,26 @@ interface AcceptanceRun {
   ok: boolean;
 }
 
-async function upload(sandbox: Sandbox): Promise<number> {
-  const names = (await readdir(LOCAL_DIR)).filter((name) => name.endsWith(".py"));
-  for (const name of names) await sandbox.files.upload(`${REMOTE_DIR}/${name}`, await readFile(join(LOCAL_DIR, name)));
-  return names.length;
+export interface SealedSuite {
+  digest: string;
+  files: { path: string; content: Buffer }[];
+}
+
+/**
+ * Reads the suite from the repo and fixes its digest. The seller does this before the agent writes any
+ * code, and the same files are what get uploaded and run.
+ */
+export async function sealSuite(): Promise<SealedSuite> {
+  const names = (await readdir(LOCAL_DIR)).filter((name) => name.endsWith(".py")).sort();
+  const files = await Promise.all(names.map(async (path) => ({ path, content: await readFile(join(LOCAL_DIR, path)) })));
+  return { digest: acceptanceSuiteDigest(files), files };
+}
+
+/** Uploads the sealed files and confirms, from inside the sandbox, that they hash to the sealed digest. */
+async function upload(sandbox: Sandbox, suite: SealedSuite): Promise<void> {
+  for (const file of suite.files) await sandbox.files.upload(`${REMOTE_DIR}/${file.path}`, new Uint8Array(file.content));
+  const remote = (await sh(sandbox, acceptanceSuiteDigestCommand(REMOTE_DIR))).stdout.trim();
+  if (remote !== suite.digest) throw new Error(`acceptance suite in the sandbox hashes to ${remote}, expected ${suite.digest}`);
 }
 
 async function runAcceptance(sandbox: Sandbox): Promise<AcceptanceRun> {
@@ -85,16 +101,28 @@ Find the cause and fix the converter so it meets the contract. Add or adjust you
 }
 
 /** Runs the hidden suite; failures go back to the agent as names and messages only, then both suites run again. */
-export async function acceptanceLoop(sandbox: Sandbox, workspace: Workspace, facts: string): Promise<CheckResult> {
-  const files = await upload(sandbox);
-  await emit({ type: "seller.step", step: "acceptance", detail: `uploaded the independent acceptance suite (${files} files) to ${REMOTE_DIR}` });
+export async function acceptanceLoop(
+  sandbox: Sandbox,
+  workspace: Workspace,
+  facts: string,
+  suite: SealedSuite,
+): Promise<{ check: CheckResult; record: AcceptanceRecord }> {
+  await upload(sandbox, suite);
+  await emit({
+    type: "seller.step",
+    step: "acceptance",
+    detail: `uploaded the acceptance suite (${suite.files.length} files) to ${REMOTE_DIR}; it hashes to the sealed digest ${suite.digest.slice(0, 12)}…`,
+  });
 
   for (let round = 1; round <= MAX_ROUNDS; round++) {
     await emit({ type: "seller.step", step: "acceptance", detail: `round ${round}/${MAX_ROUNDS}: running the acceptance suite` });
     const run = await runAcceptance(sandbox);
     await emitAcceptance(run);
     if (run.ok) {
-      return { id: "acceptance", label: "independent acceptance suite", status: "pass", detail: `${run.passed} passed in round ${round}` };
+      return {
+        check: { id: "acceptance", label: "independent acceptance suite", status: "pass", detail: `${run.passed} passed in round ${round}` },
+        record: { suiteDigest: suite.digest, passed: run.passed, failed: run.failed, ranAt: new Date().toISOString() },
+      };
     }
     if (round === MAX_ROUNDS) break;
 

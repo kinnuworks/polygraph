@@ -16,7 +16,17 @@ export interface OfferManifest {
   priceUsd: string;
   /** Results of the seller agent's own tests and attacks, run before publishing. */
   checks: CheckResult[];
+  /** The independent acceptance suite the tool passed. Its source is public, so anyone can recompute suiteDigest. */
+  acceptance?: AcceptanceRecord;
   createdAt: string;
+}
+
+export interface AcceptanceRecord {
+  /** `acceptanceSuiteDigest` of the suite files, computed before the agent wrote any code. */
+  suiteDigest: string;
+  passed: number;
+  failed: number;
+  ranAt: string;
 }
 
 export interface SignedManifest {
@@ -46,6 +56,8 @@ export interface PurchaseGrant {
   platformUrl: string;
   paymentIntentId: string;
   expiresAt: string;
+  /** Proves the caller is the buyer: send it as the `x-purchase-secret` header to /purchases/:id/refund and /done. */
+  purchaseSecret: string;
 }
 
 /** What the buyer verifies about its worker, straight from the platform. */
@@ -69,6 +81,10 @@ export interface Receipt {
   inputSha256: string;
   outputSha256: string;
   completedAt: string;
+  /** Where the job ran: in the seller's verified worker, or in a sandbox on the buyer's own account. */
+  mode?: "seller-worker" | "buyer-owned";
+  /** Sandbox that actually ran the job, when it is not the seller's worker. */
+  executionSandboxId?: string;
 }
 
 /** Events every component emits so the dashboard can render the story live. */
@@ -78,6 +94,7 @@ export type PolygraphEvent =
   | { type: "seller.patch"; ts: string; file: string; diff: string; model?: string }
   | { type: "seller.attack"; ts: string; attack: string; status: "blocked" | "crashed" | "passed"; detail?: string }
   | { type: "offer.published"; ts: string; offer: SignedManifest }
+  | { type: "offer.removed"; ts: string; offerId: string }
   | { type: "buyer.step"; ts: string; step: string; detail?: string }
   | { type: "buyer.check"; ts: string; offerId: string; check: CheckResult }
   | { type: "buyer.refused"; ts: string; offerId: string; reason: string }

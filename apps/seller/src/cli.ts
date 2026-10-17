@@ -1,7 +1,7 @@
 import { parseArgs } from "node:util";
 import type { Sandbox } from "@nodeops-createos/sandbox";
-import { emit, type OfferManifest } from "@polygraph/core";
-import { acceptanceLoop } from "./acceptance.js";
+import { emit, type AcceptanceRecord, type OfferManifest } from "@polygraph/core";
+import { acceptanceLoop, sealSuite } from "./acceptance.js";
 import { buildTool, provision } from "./build.js";
 import { FOIL_KIND, createFoils, publishTampered, type Tampering } from "./foils.js";
 import { harden } from "./harden.js";
@@ -76,6 +76,9 @@ process.once("SIGINT", () => {
 
 /** Steps 1 to 6: provision, write, test and fix, harden, acceptance, package, publish. */
 async function buildAndPublish(repo: string): Promise<{ parent: Sandbox; manifest: OfferManifest }> {
+  // Sealed before any sandbox exists or any code is written, so the suite provably predates the work.
+  const suite = await sealSuite();
+  await emit({ type: "seller.step", step: "acceptance", detail: `acceptance suite sealed before any code is written: ${suite.digest}` });
   await emit({ type: "seller.step", step: "provision", detail: `creating ${SHAPE} ${ROOTFS} sandbox (drafting ${MODELS.draft}, fixing ${MODELS.fix})` });
   const parent = await registry.create("parent", { shape: SHAPE, rootfs: ROOTFS });
   await emit({ type: "seller.step", step: "provision", detail: `sandbox ${parent.id} running, egress open for setup` });
@@ -83,7 +86,7 @@ async function buildAndPublish(repo: string): Promise<{ parent: Sandbox; manifes
   await provision(parent, repo);
   const build = await buildTool(parent, repo);
   const hardened = await harden(parent, build.workspace, build.facts);
-  const acceptance = await acceptanceLoop(parent, build.workspace, build.facts);
+  const acceptance = await acceptanceLoop(parent, build.workspace, build.facts, suite);
 
   const { digest, files } = await computeDigest(parent);
   await emit({ type: "seller.step", step: "package", detail: `artifactDigest ${digest} over ${files.length} files: ${files.join(" ")}` });
@@ -102,7 +105,8 @@ async function buildAndPublish(repo: string): Promise<{ parent: Sandbox; manifes
     egress: hardened.egress,
     artifactDigest: digest,
     priceUsd: PRICE_USD,
-    checks: [...hardened.checks, acceptance],
+    checks: [...hardened.checks, acceptance.check],
+    acceptance: acceptance.record,
     createdAt: new Date().toISOString(),
   };
   await publishOffer(manifest);
@@ -121,10 +125,30 @@ async function reuseParent(parentId: string, republish: boolean): Promise<{ pare
     throw new Error(`parent egress [${platformEgress.join(", ")}] no longer matches the offer's [${previous.manifest.egress.join(", ")}]`);
   }
   if (!republish) return { parent, manifest: previous.manifest };
-  const manifest: OfferManifest = { ...previous.manifest, offerId: newOfferId(), createdAt: new Date().toISOString() };
+  const acceptance = previous.manifest.acceptance ?? (await backfillAcceptance(previous.manifest));
+  const manifest: OfferManifest = { ...previous.manifest, acceptance, offerId: newOfferId(), createdAt: new Date().toISOString() };
   await publishOffer(manifest);
-  await emit({ type: "seller.step", step: "publish", detail: `offer ${manifest.offerId} republished for parent ${parentId}` });
+  await removeOffer(previous.manifest.offerId);
+  await emit({
+    type: "seller.step",
+    step: "publish",
+    detail: `offer ${manifest.offerId} republished for parent ${parentId}, replacing ${previous.manifest.offerId}`,
+  });
   return { parent, manifest };
+}
+
+/**
+ * For offers published before manifests carried an acceptance record: the digest of the suite as
+ * committed now, with the result of that offer's own acceptance check. `ranAt` is the old offer's
+ * publish time, which followed the acceptance run within seconds.
+ */
+async function backfillAcceptance(previous: OfferManifest): Promise<AcceptanceRecord | undefined> {
+  const check = previous.checks.find((c) => c.id === "acceptance");
+  const passed = Number(check?.detail?.match(/^(\d+) passed/)?.[1]);
+  if (check?.status !== "pass" || !Number.isFinite(passed)) return undefined;
+  const suite = await sealSuite();
+  await emit({ type: "seller.step", step: "acceptance", detail: `suite digest ${suite.digest}, last result ${passed} passed, 0 failed` });
+  return { suiteDigest: suite.digest, passed, failed: 0, ranAt: previous.createdAt };
 }
 
 const LIVE_TAMPER_NAME = "Document to PDF (tampered live)";
