@@ -1,21 +1,22 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import type { Context, Hono } from "hono";
 import { Receipt } from "mppx";
-import type { Sandbox } from "@nodeops-createos/sandbox";
+import { CreateosSandboxTimeoutError, type Sandbox } from "@nodeops-createos/sandbox";
 import type { PurchaseGrant, SignedManifest } from "@polygraph/core";
 import { config } from "./config.js";
 import { publish } from "./events.js";
 import { getOffer } from "./offers.js";
 import { chargeCard, refundPayment, tagPayment } from "./payments.js";
-import { claimWarmWorker, noteCapacityLimit, yieldPooledWorker } from "./pool.js";
+import { claimWarmWorker, keepSlowFork, noteCapacityLimit, yieldPooledWorker } from "./pool.js";
 import { addPurchase, allPurchases, getPurchase, updatePurchase, type PurchaseRecord } from "./purchase-store.js";
-import { destroyWorker, forkWorker, isCapacityError, issueAccessToken, reseedWorker } from "./sandbox.js";
-import { auditWorker } from "./verification.js";
+import { destroyWorker, finishFork, isCapacityError, issueAccessToken, reseedWorker, startFork } from "./sandbox.js";
+import { auditWorker, jobInputPresent } from "./verification.js";
 
 /** Header that carries the purchase secret from the grant. */
 export const PURCHASE_SECRET_HEADER = "x-purchase-secret";
 
 const expiryTimers = new Map<string, NodeJS.Timeout>();
+const unusedTimers = new Map<string, NodeJS.Timeout>();
 /** Purchases with a refund or done request under way, so two requests cannot act on one purchase at once. */
 const busy = new Set<string>();
 
@@ -29,8 +30,10 @@ function buyDescription(offerName: string): string {
 
 /** Destroys the purchase's worker once; later calls are no-ops. */
 async function releaseWorker(purchase: PurchaseRecord): Promise<boolean> {
-  clearTimeout(expiryTimers.get(purchase.purchaseId));
-  expiryTimers.delete(purchase.purchaseId);
+  for (const timers of [expiryTimers, unusedTimers]) {
+    clearTimeout(timers.get(purchase.purchaseId));
+    timers.delete(purchase.purchaseId);
+  }
   if (purchase.workerDestroyed) return true;
   try {
     await destroyWorker(purchase.workerSandboxId);
@@ -52,27 +55,105 @@ function scheduleExpiry(purchase: PurchaseRecord): void {
   expiryTimers.set(purchase.purchaseId, timer);
 }
 
-// Purchases restored from disk keep their deadlines; ones that lapsed while the gateway was down expire now.
-for (const purchase of allPurchases()) {
-  if (!purchase.workerDestroyed) scheduleExpiry(purchase);
-}
+const UNUSED_REASON = "expired unused: buyer never received or used the worker";
 
 /**
- * Takes a pooled worker when one is ready, otherwise forks one now. If the account quota refuses the
- * fork, an idle pooled worker of another offer gives up its slot and the fork is tried once more.
+ * A buyer whose paid request timed out at the proxy never got the grant, so cannot ask for a refund.
+ * Once the unused window passes, a worker with no job input is refunded and destroyed; one that ran a
+ * job is left to the normal expiry. A failed check is retried once, then the buyer gets the benefit of the doubt.
  */
-async function obtainWorker(offer: SignedManifest): Promise<{ worker: Sandbox; mode: "warm" | "cold" }> {
-  const warm = await claimWarmWorker(offer);
-  if (warm) return { worker: warm, mode: "warm" };
+function scheduleUnusedCheck(purchase: PurchaseRecord, delayMs: number, attempt = 1): void {
+  const timer = setTimeout(() => void checkUnused(purchase, attempt), Math.max(0, delayMs));
+  timer.unref();
+  unusedTimers.set(purchase.purchaseId, timer);
+}
+
+async function checkUnused(purchase: PurchaseRecord, attempt: number): Promise<void> {
+  unusedTimers.delete(purchase.purchaseId);
+  if (purchase.state !== "active" || purchase.workerDestroyed) return;
+  if (busy.has(purchase.purchaseId)) return scheduleUnusedCheck(purchase, 30_000, attempt);
+  busy.add(purchase.purchaseId);
+  try {
+    let reason = UNUSED_REASON;
+    try {
+      if (await jobInputPresent(purchase.workerSandboxId)) {
+        console.log(`[purchase] ${purchase.purchaseId}: job input found, left to run until ${purchase.expiresAt}`);
+        return;
+      }
+    } catch (err) {
+      if (attempt < 2) {
+        console.warn(`[purchase] ${purchase.purchaseId}: could not check for job input (${errorMessage(err)}); retrying in 60 s`);
+        return scheduleUnusedCheck(purchase, 60_000, attempt + 1);
+      }
+      reason = `${UNUSED_REASON} (the worker could not be inspected: ${errorMessage(err)})`;
+    }
+    try {
+      await refundPayment(purchase.paymentIntentId, reason);
+    } catch (err) {
+      console.error(`[purchase] !!! auto-refund of ${purchase.paymentIntentId} failed: ${errorMessage(err)}`);
+      return;
+    }
+    updatePurchase(purchase, { state: "refunded" });
+    console.log(`[purchase] ${purchase.purchaseId}: refunded ${purchase.paymentIntentId}, ${reason}`);
+    publish({ type: "payment.refunded", paymentIntentId: purchase.paymentIntentId, reason });
+    await releaseWorker(purchase);
+  } finally {
+    busy.delete(purchase.purchaseId);
+  }
+}
+
+function scheduleLifecycle(purchase: PurchaseRecord): void {
+  scheduleExpiry(purchase);
+  if (purchase.state === "active") scheduleUnusedCheck(purchase, Date.parse(purchase.createdAt) + config.unusedRefundMs - Date.now());
+}
+
+// Purchases restored from disk keep their deadlines; ones that lapsed while the gateway was down are handled now.
+for (const purchase of allPurchases()) {
+  if (!purchase.workerDestroyed) scheduleLifecycle(purchase);
+}
+
+/** The sale's cold fork did not start in time; it was refunded and the fork is kept for a retry. */
+class SlowForkError extends Error {
+  constructor(readonly retryAfterSeconds: number) {
+    super("the worker did not start in time");
+  }
+}
+
+/** Starts a cold fork. If the account quota refuses it, an idle pooled worker of another offer gives up its slot once. */
+async function startColdFork(offer: SignedManifest): Promise<Sandbox> {
   const { parentSandboxId, offerId } = offer.manifest;
   try {
-    return { worker: await forkWorker(parentSandboxId), mode: "cold" };
+    return await startFork(parentSandboxId);
   } catch (err) {
     if (!isCapacityError(err)) throw err;
     noteCapacityLimit(`sale of ${offerId} hit the CreateOS quota (${errorMessage(err)})`);
     if (!(await yieldPooledWorker(offerId))) throw err;
-    return { worker: await forkWorker(parentSandboxId), mode: "cold" };
+    return startFork(parentSandboxId);
   }
+}
+
+/**
+ * Takes a pooled worker when one is ready, otherwise forks one now. A cold fork gets until `deadline`
+ * to start, so the paid request answers before the hosting proxy cuts it; a fork that misses it is kept
+ * for the buyer's retry and the sale fails with SlowForkError.
+ */
+async function obtainWorker(offer: SignedManifest, deadline: number): Promise<{ worker: Sandbox; mode: "warm" | "cold" }> {
+  const warm = await claimWarmWorker(offer);
+  if (warm) return { worker: warm, mode: "warm" };
+  const worker = await startColdFork(offer);
+  const forkStarted = Date.now();
+  try {
+    await worker.waitUntilRunning({ timeoutMs: Math.max(deadline - Date.now(), 1_000) });
+  } catch (err) {
+    if (!(err instanceof CreateosSandboxTimeoutError)) {
+      await destroyWorker(worker).catch(() => undefined);
+      throw err;
+    }
+    const waited = Date.now() - forkStarted;
+    keepSlowFork(offer, worker, config.forkReadyTimeoutMs - waited);
+    throw new SlowForkError(30);
+  }
+  return { worker: await finishFork(worker, 10_000), mode: "cold" };
 }
 
 /**
@@ -81,7 +162,8 @@ async function obtainWorker(offer: SignedManifest): Promise<{ worker: Sandbox; m
  */
 async function provision(offer: SignedManifest, paymentIntentId: string, requestStartedAt: number): Promise<PurchaseGrant> {
   const { manifest } = offer;
-  const { worker, mode } = await obtainWorker(offer);
+  const deadline = Date.now() - (performance.now() - requestStartedAt) + config.buyForkDeadlineMs;
+  const { worker, mode } = await obtainWorker(offer, deadline);
   try {
     const { bootId } = await reseedWorker(worker);
     const workerToken = await issueAccessToken(worker.id);
@@ -110,7 +192,7 @@ async function provision(offer: SignedManifest, paymentIntentId: string, request
       expiresAt: grant.expiresAt,
     };
     addPurchase(record);
-    scheduleExpiry(record);
+    scheduleLifecycle(record);
     console.log(`[purchase] ${grant.purchaseId}: ${mode} worker ${worker.id} from ${manifest.parentSandboxId} ready ${ms} ms after the paid request, boot id ${bootId}`);
     publish({ type: "worker.forked", workerSandboxId: worker.id, parentSandboxId: manifest.parentSandboxId, ms, mode });
     return grant;
@@ -178,15 +260,22 @@ export function registerPurchaseRoutes(app: Hono): void {
     try {
       grant = await provision(offer, paymentIntentId, requestStartedAt);
     } catch (err) {
-      const reason = `worker setup failed: ${errorMessage(err)}`;
+      const slow = err instanceof SlowForkError;
+      const reason = slow
+        ? `worker did not start within ${config.buyForkDeadlineMs / 1000} s; it is kept warm for a retry`
+        : `worker setup failed: ${errorMessage(err)}`;
       console.error(`[purchase] ${offer.manifest.offerId}: ${reason}`);
       try {
         await refundPayment(paymentIntentId, reason);
       } catch (refundErr) {
-        console.error(`[purchase] refund of ${paymentIntentId} failed: ${errorMessage(refundErr)}`);
+        console.error(`[purchase] !!! refund of ${paymentIntentId} failed: ${errorMessage(refundErr)}`);
         return c.json({ error: reason, refunded: false, paymentIntentId }, 502);
       }
       publish({ type: "payment.refunded", paymentIntentId, reason });
+      if (slow) {
+        c.header("Retry-After", String(err.retryAfterSeconds));
+        return c.json({ error: reason, refunded: true, paymentIntentId, retryAfter: err.retryAfterSeconds }, 503);
+      }
       return c.json({ error: reason, refunded: true, paymentIntentId }, 502);
     }
 

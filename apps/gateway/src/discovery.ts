@@ -133,6 +133,7 @@ function buildDocument(baseUrl: string): Record<string, unknown> {
     "200": { description: "Purchase grant, with a Payment-Receipt header", ...json(grantSchema) },
     "404": { description: "No such offer" },
     "502": { description: "The worker could not be created; the payment was refunded" },
+    "503": { description: "The worker did not start in time; the payment was refunded and the worker is kept for a retry after Retry-After" },
   };
   return { ...doc, servers: [{ url: baseUrl }], paths: { ...freeRoutes, ...paths } };
 }

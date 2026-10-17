@@ -18,6 +18,14 @@ function parsePoolSize(raw: string | undefined): number {
   return size;
 }
 
+function seconds(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw === "") return fallback;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) throw new Error(`${name} must be a positive number of seconds, got "${raw}"`);
+  return value;
+}
+
 function parseOrphanSweep(raw: string | undefined): "on" | "off" | "dry" {
   if (raw === undefined || raw === "") return process.env.NODE_ENV === "production" ? "on" : "off";
   if (raw === "1") return "on";
@@ -91,6 +99,12 @@ export const config = {
   eventsLogPath: resolve(runtimeDir, "events.jsonl"),
   /** Purchases, so refund and done keep working across a restart. */
   purchasesPath: resolve(runtimeDir, "purchases.json"),
-  /** A worker that is never marked done is destroyed after this long. */
-  purchaseTtlMs: 15 * 60_000,
+  /** A worker that is never marked done is destroyed after this long; refund and done work until then. */
+  purchaseTtlMs: seconds("PURCHASE_TTL_SECONDS", 15 * 60) * 1000,
+  /** A purchase whose worker has had no job input by this age is refunded and its worker destroyed. */
+  unusedRefundMs: seconds("UNUSED_REFUND_SECONDS", 5 * 60) * 1000,
+  /** A sale waits this long for a cold fork; the hosting proxy cuts requests at about 60 s. */
+  buyForkDeadlineMs: seconds("BUY_FORK_DEADLINE_SECONDS", 45) * 1000,
+  /** A fork too slow for its sale is kept for the buyer's retry, for at most this long once running. */
+  spareMaxIdleMs: 5 * 60_000,
 } as const;

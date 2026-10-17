@@ -34,14 +34,19 @@ export async function revokeAccessToken(sandboxId: string): Promise<void> {
 /** True when CreateOS refused to create a sandbox because of the account's concurrency quota or credit. */
 export const isCapacityError = (err: unknown) => err instanceof CreateosSandboxRateLimitError || err instanceof CreateosSandboxPaymentRequiredError;
 
-/** Forks a running worker from a paused parent. Forking needs the parent paused, so a running parent is refused. */
-export async function forkWorker(parentSandboxId: string): Promise<Sandbox> {
+/** Starts a fork of a paused parent and records it. Forking needs the parent paused, so a running parent is refused. */
+export async function startFork(parentSandboxId: string): Promise<Sandbox> {
   const parent = await client.getSandbox(parentSandboxId);
   if (parent.status !== "paused") throw new Error(`parent sandbox ${parentSandboxId} is ${parent.status}, expected paused`);
   const worker = await parent.fork({});
   trackWorker(worker.id);
+  return worker;
+}
+
+/** Waits for a started fork to run and prepares it. Any failure destroys it before rethrowing. */
+export async function finishFork(worker: Sandbox, timeoutMs: number): Promise<Sandbox> {
   try {
-    await worker.waitUntilRunning({ timeoutMs: config.forkReadyTimeoutMs });
+    await worker.waitUntilRunning({ timeoutMs });
     // A paused worker is useless to a buyer and still holds a quota slot, so idle auto-pause is always
     // switched off, whether or not the fork reports one inherited from its parent.
     await worker.setAutoPause(null);
@@ -50,6 +55,11 @@ export async function forkWorker(parentSandboxId: string): Promise<Sandbox> {
     throw err;
   }
   return worker;
+}
+
+/** Forks a running worker from a paused parent. */
+export async function forkWorker(parentSandboxId: string): Promise<Sandbox> {
+  return finishFork(await startFork(parentSandboxId), config.forkReadyTimeoutMs);
 }
 
 /** Every sandbox on the account that is not destroyed or being destroyed. */

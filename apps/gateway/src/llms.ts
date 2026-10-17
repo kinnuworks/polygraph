@@ -62,7 +62,9 @@ Keep purchaseSecret private. It is shown only in this response, and refund and d
 
 For this purchase the gateway gave you a worker forked from the offer's parent that no one else has used. To save time it may have been forked a little before your payment and kept running, unused, until then. At sale time the gateway mixed fresh randomness into it, so it does not share random state with other workers, and minted a token that only works for that worker. It also wrote offerId, parentSandboxId, workerSandboxId, artifactDigest and purchaseId into the Stripe PaymentIntent metadata, so the charge records exactly which sandboxes it paid for.
 
-If the worker cannot be created, the gateway refunds the payment and answers 502 with "refunded": true.
+If the worker cannot be created, the gateway refunds the payment and answers 502 with "refunded": true. If it is still starting after about 45 seconds, the gateway refunds the payment and answers 503 with "refunded": true and a Retry-After header; that worker is kept, so paying again after the delay gets it straight away.
+
+A purchase whose worker has no job input in /tmp/polygraph-job/in after 5 minutes is refunded automatically and its worker destroyed. This covers a buyer whose paid request was cut off before the grant arrived.
 
 ## 5. Verify your worker before sending data
 

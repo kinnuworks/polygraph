@@ -2,7 +2,7 @@ import type { Sandbox } from "@nodeops-createos/sandbox";
 import type { SignedManifest } from "@polygraph/core";
 import { config } from "./config.js";
 import { listOffers } from "./offers.js";
-import { destroyWorker, forkWorker, isCapacityError, isRunning } from "./sandbox.js";
+import { destroyWorker, finishFork, forkWorker, isCapacityError, isRunning } from "./sandbox.js";
 import { touchWorker } from "./workers.js";
 
 /** Pre-forked, running workers for one offer. Keyed by offer and parent, since a republished offer may point at a new parent. */
@@ -14,6 +14,16 @@ interface Pool {
 }
 
 const pools = new Map<string, Pool>();
+
+/** A fork that was too slow for the sale that started it, kept so the buyer's retry gets it warm. */
+interface Spare {
+  offerId: string;
+  parentSandboxId: string;
+  worker: Sandbox;
+  readyAt: number;
+}
+
+const spares: Spare[] = [];
 const inFlight = new Set<Promise<void>>();
 let forkingBlockedUntil = 0;
 let draining = false;
@@ -65,8 +75,40 @@ function closePool(pool: Pool, why: string): void {
   for (const worker of pool.ready.splice(0)) void discard(worker, why);
 }
 
-/** Hands out a running pooled worker for this offer, or null when none is ready. */
+/**
+ * Keeps a fork that missed its sale's deadline: it finishes starting in the background and then waits,
+ * unused, for the next sale of the same offer (usually the buyer's retry).
+ */
+export function keepSlowFork(offer: SignedManifest, worker: Sandbox, remainingMs: number): void {
+  const { offerId, parentSandboxId } = offer.manifest;
+  const finishing = finishFork(worker, Math.max(remainingMs, 1_000)).then(
+    async (ready) => {
+      if (draining) return discard(ready, "gateway shutting down");
+      spares.push({ offerId, parentSandboxId, worker: ready, readyAt: Date.now() });
+      console.log(`[pool] ${offerId}: slow fork ${ready.id} is running and kept for the next sale`);
+    },
+    (err) => console.error(`[pool] ${offerId}: slow fork ${worker.id} never started: ${errorMessage(err)}`),
+  );
+  inFlight.add(finishing);
+  void finishing.finally(() => inFlight.delete(finishing));
+}
+
+/** Takes a kept slow fork for this offer, if one is running. */
+async function claimSpare(offer: SignedManifest): Promise<Sandbox | null> {
+  for (;;) {
+    const index = spares.findIndex((s) => s.offerId === offer.manifest.offerId && s.parentSandboxId === offer.manifest.parentSandboxId);
+    if (index === -1) return null;
+    const [spare] = spares.splice(index, 1);
+    touchWorker(spare!.worker.id);
+    if (await isRunning(spare!.worker).catch(() => false)) return spare!.worker;
+    await discard(spare!.worker, `kept fork found ${spare!.worker.status} at claim time`, true);
+  }
+}
+
+/** Hands out a running pooled worker (or kept slow fork) for this offer, or null when none is ready. */
 export async function claimWarmWorker(offer: SignedManifest): Promise<Sandbox | null> {
+  const spare = await claimSpare(offer);
+  if (spare) return spare;
   const pool = pools.get(offer.manifest.offerId);
   if (!pool || pool.parentSandboxId !== offer.manifest.parentSandboxId) return null;
   for (let worker = pool.ready.shift(); worker; worker = pool.ready.shift()) {
@@ -95,14 +137,23 @@ export async function yieldPooledWorker(exceptOfferId: string): Promise<boolean>
   return true;
 }
 
-/** Ids of workers waiting in a pool. */
+/** Ids of workers waiting in a pool or kept as spares. */
 export function pooledWorkerIds(): Set<string> {
-  return new Set([...pools.values()].flatMap((pool) => pool.ready.map((worker) => worker.id)));
+  return new Set([...[...pools.values()].flatMap((pool) => pool.ready.map((worker) => worker.id)), ...spares.map((s) => s.worker.id)]);
+}
+
+/** Destroys spares that nobody claimed in time. */
+function expireSpares(): void {
+  const cutoff = Date.now() - config.spareMaxIdleMs;
+  for (let i = spares.length - 1; i >= 0; i--) {
+    if (spares[i]!.readyAt < cutoff) void discard(spares.splice(i, 1)[0]!.worker, "kept fork was not claimed in time");
+  }
 }
 
 /** Matches pools to the offers on disk, drops workers that stopped running, and tops every pool up. */
 export async function syncPools(): Promise<void> {
   if (draining) return;
+  expireSpares();
   const offers = (await listOffers()).filter(
     (offer) => config.poolOffers.size === 0 || config.poolOffers.has(offer.manifest.offerId),
   );
@@ -141,7 +192,7 @@ export async function drainPools(): Promise<void> {
   const deadline = new Promise<void>((resolve) => (timer = setTimeout(resolve, DRAIN_WAIT_MS)));
   await Promise.race([Promise.allSettled([...inFlight]), deadline]);
   clearTimeout(timer);
-  const workers = [...pools.values()].flatMap((pool) => pool.ready.splice(0));
+  const workers = [...[...pools.values()].flatMap((pool) => pool.ready.splice(0)), ...spares.splice(0).map((s) => s.worker)];
   pools.clear();
   await Promise.all(workers.map((worker) => discard(worker, "gateway shutting down")));
 }
