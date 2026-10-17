@@ -47,16 +47,35 @@ sandbox, signs an offer    ->    GET /offers, /llms.txt,      <-       discovers
 
 Four acts, the same ones the dashboard shows live:
 
-1. Create. The seller agent gets a one-line spec and an interface contract, writes the converter and its own tests, runs them in a CreateOS sandbox and fixes whatever fails. A separate acceptance suite that the agent never sees then checks the result; on failure the agent only gets the failing test names and messages. It adds robustness tests for oversized, corrupt and slow inputs, and the sandbox's egress is locked to deny everything.
-2. Distrust. Before paying, the buyer reads the seller's sandbox through CreateOS's API with a token the gateway issues and revokes about 60 seconds later. If the signed claims and the platform disagree, the buyer refuses and no PaymentIntent is created. After paying, it checks the worker's lineage, egress and tool digest the same way, and withholds its document and asks for a refund if anything is off.
+1. Create. The seller agent gets a one-line spec and an interface contract (archival PDF/A-2b output, title metadata, every spreadsheet sheet, fixed exit codes), writes the converter and its own tests, runs them in a CreateOS sandbox and fixes whatever fails. A fast model drafts and a stronger model fixes, and every patch names the model that wrote it. In the run shown in our logs, the draft failed its own title-fallback test; the fix came from the real pytest output. A hand-written acceptance suite that the agent never sees then checks the result, and its digest is sealed before any code is written and signed into the offer, so nobody can swap the suite after the fact. The agent also adds robustness tests for oversized, corrupt and slow inputs, and the sandbox's egress is locked to deny everything.
+2. Distrust. Before paying, the buyer reads the seller's sandbox through CreateOS's API with a token the gateway issues and revokes about 60 seconds later. If the signed claims and the platform disagree, the buyer refuses and no PaymentIntent is created. After paying, it checks the worker's lineage and egress the same way, downloads every tool file and hashes it itself, runs `dpkg --verify` on the installed LibreOffice packages and checks Python's startup hooks against a stock list. If anything is off it withholds its document and asks for a refund.
 3. Pay. The gateway is a Stripe machine payments (MPP) endpoint. It answers 402 with a challenge; the buyer pays with a shared payment token and retries. The gateway writes the offer, parent sandbox, worker sandbox and artifact digest into the PaymentIntent metadata, so the Stripe dashboard holds the proof next to the charge.
-4. Run. The buyer uploads its document to the worker, runs the converter there, checks the PDF, keeps a receipt with every id and both file hashes, and tells the gateway to destroy the worker.
+4. Run. The buyer uploads its document to the worker, runs the converter there, checks the PDF, keeps a receipt with every id and both file hashes, and tells the gateway to destroy the worker. With `--mode own` it skips the seller's worker entirely and runs the verified bundle in a sandbox in its own CreateOS account.
+
+A measured before and after: plain `soffice --convert-to pdf` fails 3 of the 17 archival acceptance tests (no PDF/A identification, no title fallback). The seller agent's tool passes all 17, and the PDF the buyer received in our live run declares PDF/A-2b in its metadata.
+
+### Every CreateOS call the buyer makes
+
+| Call | Token | What it proves |
+|---|---|---|
+| `GET /v1/sandboxes/{parent}` | parent token from `/inspect` | the parent is paused and its real egress matches the signed claim |
+| `GET /v1/sandboxes/{worker}` | worker token from the purchase | `forked_from` is the signed parent; egress still matches |
+| `POST /v1/sandboxes/{worker}/exec` | worker token | runs the digest, `dpkg --verify` and hook checks, then the job |
+| `GET /v1/sandboxes/{worker}/files?path=` | worker token | downloads the tool files so the buyer can hash them itself |
+| `PUT /v1/sandboxes/{worker}/files?path=` | worker token | uploads the document |
+| sandbox create, egress lock, exec, destroy | the buyer's own account key | `--mode own`: runs the bundle where the seller has no access |
+
+The same token gets 404 on any other sandbox and 403 on fork or egress changes, which we measured.
+
+### Live tamper
+
+`npm run seller -- --tamper egress` (or `artifact`) forks the genuine parent, really tampers with the copy, and publishes a validly signed offer that still claims the genuine values. It replaces the previous foil of the same kind and takes about 10 seconds. Run the buyer afterwards and watch it refuse.
 
 ## What the checks prove, and what they don't
 
 The buyer trusts CreateOS, not the seller. CreateOS enforces egress on the host, outside the sandbox, so code inside can't change or bypass it, and a worker's `forked_from` field comes from the platform. Those are the facts the buyer checks.
 
-They don't prove everything. The worker lives in the seller's CreateOS account, and an account owner can still run commands in its own sandboxes; CreateOS's audit log records control-plane actions such as forks and egress changes but not commands or file reads. So Polygraph shows that the seller can't swap the machine or open its network without the buyer seeing it. It doesn't show that the seller can't read a file sent to a seller-owned sandbox. Running the bundle in a sandbox the buyer owns would close that gap.
+They don't prove everything. The worker lives in the seller's CreateOS account, and an account owner can still run commands in its own sandboxes; CreateOS's audit log records control-plane actions such as forks and egress changes but not commands or file reads. So Polygraph shows that the seller can't swap the machine or open its network without the buyer seeing it. It doesn't show that the seller can't read a file sent to a seller-owned sandbox. `--mode own` closes that gap by running the verified bundle in the buyer's own CreateOS account. The package and hook checks catch careless tampering with the system image, but dpkg's checksum database lives in the seller's image, so a seller who rewrites it too would not be caught. The seller's signing key is pinned on first use (`--trust-seller`), which is trust on first use, not an identity check.
 
 ## Sponsor tools, and what each does here
 
