@@ -4,7 +4,14 @@ The lie detector for agent commerce. Don't trust the seller. Ask the platform.
 
 AI agents now pay for tools on their own, one HTTP request at a time. They have no good way to tell whether the service they are paying is the one it claims to be. Polygraph is a working answer for one kind of service: an open-source tool run in a sandbox. A seller agent packages the tool and offers it for sale. A buyer agent checks every claim the seller makes against CreateOS's own records before any money moves, refuses offers that don't match, pays with Stripe, and then runs its job inside the exact sandbox it checked.
 
-Built for the CreateOS x Stripe Projects hackathon, October 2026.
+**Live:** https://production-polygraph.tyzo.nodeops.app (gateway and live console) · **Video:** [link coming] · **For agents:** [/llms.txt](https://production-polygraph.tyzo.nodeops.app/llms.txt), [/openapi.json](https://production-polygraph.tyzo.nodeops.app/openapi.json)
+
+In three lines:
+- A seller agent writes a document converter, tests it in a CreateOS sandbox, fixes what fails, locks the network and signs an offer.
+- A buyer agent asks CreateOS itself, not the seller, whether that sandbox really is what the offer says. It pays $0.50 through Stripe only if it is.
+- Against the live gateway, **6 of 6 dishonest offers were refused**. Five were stopped before any payment was created. The sixth was paid, caught by the buyer's own file hashing, and refunded automatically.
+
+Built during the CreateOS x Stripe Projects hackathon on October 17, 2026 (PT). The first commit is at 01:18 IST on October 18, 48 minutes after the event opened.
 
 ## The problem
 

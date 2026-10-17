@@ -1,0 +1,56 @@
+
+> seller
+> tsx --env-file=.env apps/seller/src/cli.ts --no-foils
+
+[seller.step] provision · creating s-2vcpu-4gb devbox:1 sandbox (drafting claude-haiku-5-5, fixing claude-sonnet-5-5)
+[seller.step] provision · sandbox sb-01m55s1xr17rpy9amfy40ne3ts running, egress open for setup
+[seller.step] provision · installing libreoffice-writer-nogui libreoffice-calc-nogui libreoffice-impress-nogui python3-uno poppler-utils
+[seller.step] provision · LibreOffice installed in 12 s
+[seller.step] provision · cloned https://github.com/unoconv/unoserver at 7bfdcee Back to development: 3.8
+[seller.step] write · agent is writing convert.py, tests and fixtures from a one-line spec
+[seller.step] write · agent (claude-haiku-5-5): Packaged LibreOffice headless as a stdlib-only converter at /opt/tool/convert.py. It validates the input (extension, size, zip or RTF structure), copies it into a private temp directory, and converts with a per-run LibreOffice profile so concurrent runs do not collide. It exports PDF/A-2b via the calc, writer, and impress PDF filters, writes <outdir>/<stem>.pdf, and prints the absolute path last. Exit codes: 2 for bad extension, unreadable or corrupt input, or conversion failure; 3 for inputs over 25 MB; 4 for the 60 s timeout, which kills the whole process group. tests/make_fixtures.py builds docx, odt, rtf, pptx and xlsx samples with the standard library, and tests/test_convert.py covers formats, PDF/A markers, text extraction, every xlsx sheet, title metadata with stem fallback, non-ASCII names, exit codes, timeout, and concurrency. Caveats: I could not execute anything in this session, so the tests are unrun. The PDF/A and title checks depend on LibreOffice's XMP and Info output, and the title fallback to the file stem relies on LibreOffice's default behaviour. The pptx fixture is hand-written and may need adjustment. Run `cd /opt/tool && python3 -m pytest -q` to verify.
+  convert.py: +148 -0 (written by claude-haiku-5-5)
+[seller.patch] patched convert.py (written by claude-haiku-5-5)
+  tests/make_fixtures.py: +208 -0 (written by claude-haiku-5-5)
+[seller.patch] patched tests/make_fixtures.py (written by claude-haiku-5-5)
+  tests/test_convert.py: +169 -0 (written by claude-haiku-5-5)
+[seller.patch] patched tests/test_convert.py (written by claude-haiku-5-5)
+[seller.step] test · run 1/6: python3 -m pytest -q
+  agent tests: 19 passed, 1 failed (exit 1)
+[seller.test] tests: 19 passed, 1 failed
+[seller.step] fix · 1 failing, sending the real output back to the agent
+[seller.step] fix · agent (claude-sonnet-5-5): Root cause: LibreOffice only writes a PDF /Title when the source has a title in its metadata. A document without one (test_title_falls_back_to_stem) gets an empty Title, so the stem fallback in the contract was never implemented. The other 19 tests passed. The timeout test's stderr was expected output, not a failure. Fix in convert.py: before converting, the private staged copy gets the file stem written as its title if it has no non-empty one. This covers OOXML (docProps/core.xml, with the part, rel and content-type created if missing), ODT (meta.xml, with the part and manifest entry created if missing) and RTF (an \info\title group, non-ASCII escaped). The user's input file is never modified, and existing titles are left alone. No test was changed because the test was correct. I did not re-run the suite after this edit.
+  convert.py: +143 -0 (written by claude-sonnet-5-5)
+[seller.patch] patched convert.py (written by claude-sonnet-5-5)
+[seller.step] test · run 2/6: python3 -m pytest -q
+  agent tests: 20 passed, 0 failed (exit 0)
+[seller.test] tests: 20 passed, 0 failed
+[seller.step] harden · egress locked to [127.0.0.1:9]
+[seller.attack] network locked: blocked · https://example.com unreachable: curl: (6) Could not resolve host: example.com
+[seller.step] harden · agent is adding robustness tests: oversized input rejected; corrupt input reports a clear error; conversion bounded by a timeout; output stays inside the output directory
+[seller.step] harden · agent (claude-haiku-5-5): Updated convert.py: one-line error messages (newlines collapsed), CONVERT_SOFFICE and CONVERT_TIMEOUT_S environment overrides so a stand-in soffice and a short timeout can be used in tests, output directory resolved to an absolute path before creation, and a fixed RTF title fallback that previously produced a malformed group for an empty \title. Added tests/test_robustness.py with the four named tests, each writing only under tmp_path. I have not executed these files; they are unverified until run.
+  convert.py: +46 -21 (written by claude-haiku-5-5)
+[seller.patch] patched convert.py (written by claude-haiku-5-5)
+  tests/test_robustness.py: +102 -0 (written by claude-haiku-5-5)
+[seller.patch] patched tests/test_robustness.py (written by claude-haiku-5-5)
+[seller.step] harden · run 1/6: python3 -m pytest -q
+  agent tests: 25 passed, 0 failed (exit 0)
+[seller.test] tests: 25 passed, 0 failed
+[seller.attack] oversized input rejected: passed · test_oversized_input_rejected passed
+  oversized input rejected: passed (test_oversized_input_rejected passed)
+[seller.attack] corrupt input reports a clear error: passed · test_corrupt_input_reports_error passed
+  corrupt input reports a clear error: passed (test_corrupt_input_reports_error passed)
+[seller.attack] conversion bounded by a timeout: passed · test_conversion_timeout_enforced passed
+  conversion bounded by a timeout: passed (test_conversion_timeout_enforced passed)
+[seller.attack] output stays inside the output directory: passed · test_output_stays_in_output_dir passed
+  output stays inside the output directory: passed (test_output_stays_in_output_dir passed)
+[seller.step] acceptance · uploaded the independent acceptance suite (3 files) to /opt/acceptance
+[seller.step] acceptance · round 1/6: running the acceptance suite
+  acceptance: 17 passed, 0 failed
+[seller.test] tests: 17 passed, 0 failed
+[seller.step] package · artifactDigest 88cb90ae5b196649822798a92e33d6247105bb4a277882d9a7c2df8316c4836a over 4 files: ./convert.py ./tests/make_fixtures.py ./tests/test_convert.py ./tests/test_robustness.py
+[seller.step] publish · pausing parent sb-01m55s1xr17rpy9amfy40ne3ts
+[offer.published] published offer_d8d7f2b9099d (Document to PDF (LibreOffice))
+[seller.step] publish · offer offer_d8d7f2b9099d published for parent sb-01m55s1xr17rpy9amfy40ne3ts
+kept sandboxes: parent sb-01m55s1xr17rpy9amfy40ne3ts (kept)
+exit 0

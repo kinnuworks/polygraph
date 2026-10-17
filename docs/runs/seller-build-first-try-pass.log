@@ -1,0 +1,51 @@
+
+> seller
+> tsx --env-file=.env apps/seller/src/cli.ts --no-foils
+
+[seller.step] acceptance · acceptance suite sealed before any code is written: c2aaa6015792aee1695bece60454f43bcb9fbeb275fa1d0d1a0f37b22161e5a7
+[seller.step] provision · creating s-2vcpu-4gb devbox:1 sandbox (drafting claude-haiku-5-5, fixing claude-sonnet-5-5)
+[seller.step] provision · sandbox sb-01m55xnadd6p0d29vvsxx1ynnj running, egress open for setup
+[seller.step] provision · installing libreoffice-writer-nogui libreoffice-calc-nogui libreoffice-impress-nogui python3-uno poppler-utils
+[seller.step] provision · LibreOffice installed in 20 s
+[seller.step] provision · cloned https://github.com/unoconv/unoserver at 7bfdcee Back to development: 3.8
+[seller.step] write · agent is writing convert.py, tests and fixtures from a one-line spec
+[seller.step] write · agent (claude-haiku-5-5): Packaged LibreOffice headless as a stdlib-only converter. convert.py validates the input (extension, readability, 25 MiB limit, zip/XML or RTF header integrity), copies it into a private temp dir with the document title set to its metadata title or the file stem, and converts it with LibreOffice using PDF/A-2b (SelectPdfVersion=2). Each run uses its own LibreOffice profile so concurrent runs work. Exit codes: 0 success, 2 unsupported or unreadable/corrupt input, 3 over 25 MiB, 4 timeout (60 s, overridable via CONVERT_TIMEOUT_SECONDS for tests). Spreadsheets export all sheets through the Calc PDF filter. tests/make_fixtures.py builds minimal docx/odt/rtf/pptx/xlsx files with the standard library, and tests/test_convert.py covers conversion, PDF/A marker, text, title rules, non-ASCII names, exit codes and concurrency, writing only to pytest tmp_path. Caveats: I have not executed this in the sandbox, so the pytest run and the minimal pptx/xlsx fixtures are unverified. ODT or OOXML files without a metadata part get the stem as title rather than a metadata title, because the converter does not add missing metadata parts.
+  convert.py: +289 -0 (written by claude-haiku-5-5)
+[seller.patch] patched convert.py (written by claude-haiku-5-5)
+  tests/make_fixtures.py: +144 -0 (written by claude-haiku-5-5)
+[seller.patch] patched tests/make_fixtures.py (written by claude-haiku-5-5)
+  tests/test_convert.py: +149 -0 (written by claude-haiku-5-5)
+[seller.patch] patched tests/test_convert.py (written by claude-haiku-5-5)
+[seller.step] test · run 1/6: python3 -m pytest -q
+  agent tests: 23 passed, 0 failed (exit 0)
+[seller.test] tests: 23 passed, 0 failed
+[seller.step] harden · egress locked to [127.0.0.1:9]
+[seller.attack] network locked: blocked · https://example.com unreachable: curl: (6) Could not resolve host: example.com
+[seller.step] harden · agent is adding robustness tests: oversized input rejected; corrupt input reports a clear error; conversion bounded by a timeout; output stays inside the output directory
+[seller.step] harden · agent (claude-haiku-5-5): Hardened convert.py for the robustness requirements: deterministic one-line stderr errors with no tracebacks, exit 2 for any unparseable or corrupt package (including metadata parse failures), exit 3 for oversized inputs, exit 4 on timeout with the soffice process group killed, a configurable timeout (CONVERT_TIMEOUT_SECONDS, default 60) and optional CONVERT_SOFFICE override, file:// profile URIs built with pathlib, output directory resolved to an absolute path before writing, and the printed path written as raw bytes so non-ASCII names print safely. Added tests/test_robustness.py with the four required test functions. All test writes go to tmp_path; the stand-in soffice is a shell script on PATH that only sleeps. I have not executed these tests here.
+  convert.py: +50 -17 (written by claude-haiku-5-5)
+[seller.patch] patched convert.py (written by claude-haiku-5-5)
+  tests/test_robustness.py: +103 -0 (written by claude-haiku-5-5)
+[seller.patch] patched tests/test_robustness.py (written by claude-haiku-5-5)
+[seller.step] harden · run 1/6: python3 -m pytest -q
+  agent tests: 27 passed, 0 failed (exit 0)
+[seller.test] tests: 27 passed, 0 failed
+[seller.attack] oversized input rejected: passed · test_oversized_input_rejected passed
+  oversized input rejected: passed (test_oversized_input_rejected passed)
+[seller.attack] corrupt input reports a clear error: passed · test_corrupt_input_reports_error passed
+  corrupt input reports a clear error: passed (test_corrupt_input_reports_error passed)
+[seller.attack] conversion bounded by a timeout: passed · test_conversion_timeout_enforced passed
+  conversion bounded by a timeout: passed (test_conversion_timeout_enforced passed)
+[seller.attack] output stays inside the output directory: passed · test_output_stays_in_output_dir passed
+  output stays inside the output directory: passed (test_output_stays_in_output_dir passed)
+[seller.step] acceptance · uploaded the acceptance suite (3 files) to /opt/acceptance; it hashes to the sealed digest c2aaa6015792…
+[seller.step] acceptance · round 1/6: running the acceptance suite
+  acceptance: 17 passed, 0 failed
+[seller.test] tests: 17 passed, 0 failed
+[seller.step] package · artifactDigest e1413d162ed3da48075bf9aa4788bcd623e745d17a2f7f14ee1d0b5a5c13ad51 over 4 files: ./convert.py ./tests/make_fixtures.py ./tests/test_convert.py ./tests/test_robustness.py
+[seller.step] publish · pausing parent sb-01m55xnadd6p0d29vvsxx1ynnj
+[offer.published] published offer_7c9e27eca00f (Document to PDF (LibreOffice))
+  gateway: POST /offers -> 201 ok {"offerId":"offer_7c9e27eca00f","listed":true}
+[seller.step] publish · offer offer_7c9e27eca00f published for parent sb-01m55xnadd6p0d29vvsxx1ynnj
+kept sandboxes: parent sb-01m55xnadd6p0d29vvsxx1ynnj (kept)
+exit=0
