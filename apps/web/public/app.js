@@ -140,3 +140,34 @@ if ("IntersectionObserver" in window) {
 } else {
   document.querySelectorAll(".reveal").forEach((node) => node.classList.add("in"));
 }
+
+/* ---------- tamper it yourself ---------- */
+
+function wireTamper() {
+  const group = document.querySelector('[data-el="tamper"]');
+  if (!group) return;
+  if (demoMode) { group.hidden = true; return; }
+  const status = group.querySelector('[data-el="tamper-status"]');
+  const buttons = [...group.querySelectorAll("button[data-kind]")];
+  const say = (text, tone = "") => { status.textContent = text; status.dataset.tone = tone; };
+  for (const button of buttons) {
+    button.addEventListener("click", async () => {
+      const kind = button.dataset.kind;
+      buttons.forEach((b) => (b.disabled = true));
+      say(kind === "egress" ? "Forking the seller's sandbox and opening its network…" : "Forking the seller's sandbox and changing one byte…");
+      try {
+        const res = await fetch("/demo/tamper", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind }) });
+        const body = await res.json().catch(() => ({}));
+        if (res.status === 429) say(`Someone just tampered. Try again in ${res.headers.get("retry-after") || "a minute"} s.`, "bad");
+        else if (!res.ok) say(body.error || `The tamper did not run (HTTP ${res.status}).`, "bad");
+        else if (body.refused) say("Refused before any payment. CreateOS contradicted the seller's signed claim.", "good");
+        else say("Pre-payment checks pass: this tamper only shows inside a worker. The buyer catches it after paying and gets refunded.", "");
+      } catch {
+        say("Could not reach the gateway.", "bad");
+      } finally {
+        setTimeout(() => buttons.forEach((b) => (b.disabled = false)), 5000);
+      }
+    });
+  }
+}
+wireTamper();

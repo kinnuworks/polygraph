@@ -515,3 +515,13 @@ h3,.t-h3{margin:0;font-family:var(--font-display);font-size:var(--fs-h3);font-we
   .col--trust{order:1}.col--buyer{order:2}.col--seller{order:3}
   .proof{grid-template-columns:1fr}
 }
+
+/* Tamper it yourself */
+.tamper{display:flex;align-items:center;gap:6px;margin-right:6px}
+.tamper__label{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#A4A4AE}
+.tool-btn--tamper{border:1px solid rgba(247,160,40,.45);color:#FFC45A}
+.tool-btn--tamper:hover{background:rgba(247,160,40,.12)}
+.tool-btn--tamper[disabled]{opacity:.5;cursor:progress}
+.tamper__status{font-size:12.5px;color:#C9C7C2;max-width:340px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tamper__status[data-tone="bad"]{color:#FF8A80}.tamper__status[data-tone="good"]{color:#7EE2A8}
+@media (max-width:760px){.tamper{flex-wrap:wrap}.tamper__status{white-space:normal;max-width:none}}

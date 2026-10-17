@@ -85,6 +85,12 @@
                 <li class="phase" data-phase="3"><span class="phase__mark" aria-hidden="true">4</span>Run</li>
               </ol>
               <div class="console__tools">
+                <div class="tamper" data-el="tamper" role="group" aria-label="Tamper it yourself">
+                  <span class="tamper__label">Tamper it yourself</span>
+                  <button class="tool-btn tool-btn--tamper" type="button" data-kind="egress" title="Fork the seller's sandbox, open its network, keep the signed claim that it is locked">Open the network</button>
+                  <button class="tool-btn tool-btn--tamper" type="button" data-kind="artifact" title="Fork the seller's sandbox and change one byte of the tool after signing">Change one byte</button>
+                  <span class="tamper__status" data-el="tamper-status" aria-live="polite"></span>
+                </div>
                 <span class="preview-tag" data-el="preview-tag" hidden>Replay of a recorded run</span>
                 <button class="tool-btn" type="button" data-el="replay" hidden>
                   <svg fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-replay"/></svg>
