@@ -60,18 +60,24 @@ export async function run(options: RunOptions): Promise<boolean> {
   const row = (offer: SignedManifest, outcome: Outcome, evidence = "") =>
     rows.push({ offerId: offer.manifest.offerId, priceUsd: offer.manifest.priceUsd, outcome, evidence });
 
+  // Check every offer against the platform before paying anyone, so every refusal is on the record.
+  const candidates: { offer: SignedManifest; before: Verdict }[] = [];
   for (const offer of offers) {
+    const { offerId } = offer.manifest;
+    const before = await safely(offerId, () => verifyOffer(gateway, offer));
+    if (before.passed) {
+      candidates.push({ offer, before });
+      continue;
+    }
+    const reason = before.reason ?? "verification failed";
+    await refuse(offerId, reason);
+    row(offer, "refused before payment", reason);
+  }
+
+  for (const { offer, before } of candidates) {
     const { offerId } = offer.manifest;
     if (job.length > 0) {
       row(offer, "not needed");
-      continue;
-    }
-
-    const before = await safely(offerId, () => verifyOffer(gateway, offer));
-    if (!before.passed) {
-      const reason = before.reason ?? "verification failed";
-      await refuse(offerId, reason);
-      row(offer, "refused before payment", reason);
       continue;
     }
 

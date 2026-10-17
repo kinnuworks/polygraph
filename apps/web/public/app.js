@@ -1,5 +1,12 @@
 import { createConsole, renderReceipt } from "./console.js";
 
+// Event types the gateway names its SSE frames after.
+const EVENT_TYPES = [
+  "seller.step", "seller.test", "seller.patch", "seller.attack", "offer.published",
+  "buyer.step", "buyer.check", "buyer.refused",
+  "payment.created", "payment.refunded", "worker.forked", "worker.destroyed", "job.completed",
+];
+
 const params = new URLSearchParams(location.search);
 const isOn = (name) => params.has(name) && !["0", "false"].includes(params.get(name));
 const demoMode = isOn("demo");
@@ -44,11 +51,6 @@ async function startDemo() {
 
 /* ---------- live gateway ---------- */
 
-const EVENT_TYPES = [
-  "seller.step", "seller.test", "seller.patch", "seller.attack", "offer.published",
-  "buyer.step", "buyer.check", "buyer.refused",
-  "payment.created", "payment.refunded", "worker.forked", "worker.destroyed", "job.completed",
-];
 
 function connectLive() {
   // The gateway replays recent events on every (re)connect; skip the ones already rendered.
