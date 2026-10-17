@@ -44,6 +44,12 @@ async function startDemo() {
 
 /* ---------- live gateway ---------- */
 
+const EVENT_TYPES = [
+  "seller.step", "seller.test", "seller.patch", "seller.attack", "offer.published",
+  "buyer.step", "buyer.check", "buyer.refused",
+  "payment.created", "payment.refunded", "worker.forked", "worker.destroyed", "job.completed",
+];
+
 function connectLive() {
   // The gateway replays recent events on every (re)connect; skip the ones already rendered.
   const seen = new Set();
@@ -63,6 +69,8 @@ function connectLive() {
       loadOffers();
     };
     source.onmessage = (message) => handle(message.data);
+    // The gateway names each SSE frame after its event type, so listen for every known type too.
+    for (const type of EVENT_TYPES) source.addEventListener(type, (message) => handle(message.data));
     source.onerror = () => {
       if (source.readyState === EventSource.CLOSED) {
         // The browser gave up (e.g. the gateway is down); retry with backoff.
