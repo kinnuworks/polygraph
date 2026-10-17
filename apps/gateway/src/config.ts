@@ -18,6 +18,14 @@ function parsePoolSize(raw: string | undefined): number {
   return size;
 }
 
+function parseOrphanSweep(raw: string | undefined): "on" | "off" | "dry" {
+  if (raw === undefined || raw === "") return process.env.NODE_ENV === "production" ? "on" : "off";
+  if (raw === "1") return "on";
+  if (raw === "0") return "off";
+  if (raw === "dry") return "dry";
+  throw new Error(`ORPHAN_SWEEP must be 1, 0 or dry, got "${raw}"`);
+}
+
 const here = fileURLToPath(new URL(".", import.meta.url));
 const repoRoot = resolve(here, "../../..");
 const runtimeDir = resolve(here, "../.runtime");
@@ -59,6 +67,14 @@ export const config = {
   poolSize: parsePoolSize(process.env.POOL_SIZE),
   /** Offer ids that get a warm pool. Empty means every offer; set it when sandbox quota is tight. */
   poolOffers: new Set((process.env.POOL_OFFERS ?? "").split(",").map((id) => id.trim()).filter(Boolean)),
+  /**
+   * Destroy forks of offer parents that this instance does not hold, such as a warm worker left by a
+   * deployment that was put to sleep. "1" on, "0" off, "dry" logs what it would destroy.
+   * Default: on in production, off elsewhere, so a local run never touches the live deployment's workers.
+   */
+  orphanSweep: parseOrphanSweep(process.env.ORPHAN_SWEEP),
+  /** A fork younger than this is never treated as an orphan; it may still be starting for its owner. */
+  orphanMinAgeMs: 90_000,
   /** How often pools are refilled and checked, and untracked workers destroyed. */
   sweepIntervalMs: 60_000,
   /** Cold forks have taken 30 to 50 s under load; leave room before giving up and refunding. */

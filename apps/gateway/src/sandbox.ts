@@ -42,13 +42,23 @@ export async function forkWorker(parentSandboxId: string): Promise<Sandbox> {
   trackWorker(worker.id);
   try {
     await worker.waitUntilRunning({ timeoutMs: config.forkReadyTimeoutMs });
-    // A parent with idle auto-pause would pass it on; a worker must stay running until it is used.
-    if (worker.data.auto_pause_after_seconds) await worker.setAutoPause(null);
+    // A paused worker is useless to a buyer and still holds a quota slot, so idle auto-pause is always
+    // switched off, whether or not the fork reports one inherited from its parent.
+    await worker.setAutoPause(null);
   } catch (err) {
     await destroyWorker(worker).catch(() => undefined);
     throw err;
   }
   return worker;
+}
+
+/** Every sandbox on the account that is not destroyed or being destroyed. */
+export async function listLiveSandboxes(): Promise<Sandbox[]> {
+  const live: Sandbox[] = [];
+  for await (const sandbox of client.iterateSandboxes()) {
+    if (sandbox.status !== "destroyed" && sandbox.status !== "destroying") live.push(sandbox);
+  }
+  return live;
 }
 
 /** Reads a sandbox with the owner key. */

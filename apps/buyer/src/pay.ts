@@ -89,7 +89,9 @@ function parseCliJson(stdout: string): Record<string, unknown> {
   for (const candidate of candidates) {
     try {
       const parsed: unknown = JSON.parse(candidate);
-      if (isRecord(parsed)) return parsed;
+      // Some link-cli commands wrap their single result in a one-element array.
+      const first = Array.isArray(parsed) && parsed.length > 0 ? parsed[0] : parsed;
+      if (isRecord(first)) return first;
     } catch {
       /* try the next candidate */
     }
@@ -136,16 +138,30 @@ async function payWithLink(url: string, expectedCents: number, offer: OfferManif
   }
 
   await emit({ type: "buyer.step", step: "awaiting-approval", detail: `approve ${spendRequestId} in the Link app: ${String(started.approval_url)}` });
-  const polled = await linkCli(continuation(started, "poll_argv"));
+  const hasNext = isRecord(started._next);
+  const polled = hasNext ? await linkCli(continuation(started, "poll_argv")) : await waitForApproval(spendRequestId);
   if (polled.status !== "approved") throw new PaymentDeclined(`Link spend request ended as ${String(polled.status)}`);
 
-  const paid = await linkCli(continuation(started, "pay_argv"));
+  const paid = hasNext
+    ? await linkCli(continuation(started, "pay_argv"))
+    : await linkCli(["mpp", "pay", url, "-X", "POST", "--test", "--spend-request-id", spendRequestId]);
   const headers = isRecord(paid.headers) ? paid.headers : {};
   return {
     status: Number(paid.status),
     receiptHeader: typeof headers["payment-receipt"] === "string" ? headers["payment-receipt"] : null,
     body: typeof paid.body === "string" ? paid.body : JSON.stringify(paid.body ?? null),
   };
+}
+
+/** Polls a spend request until the person approves or declines it in the Link app (up to 10 minutes). */
+async function waitForApproval(spendRequestId: string): Promise<Record<string, unknown>> {
+  const deadline = Date.now() + 10 * 60_000;
+  while (Date.now() < deadline) {
+    const current = await linkCli(["spend-request", "retrieve", spendRequestId]);
+    if (current.status !== "pending_approval") return current;
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
+  }
+  return { status: "expired" };
 }
 
 function isPurchaseGrant(value: unknown): value is PurchaseGrant {

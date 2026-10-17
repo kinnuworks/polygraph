@@ -20,9 +20,9 @@ let draining = false;
 
 const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-function discard(worker: Sandbox, why: string): Promise<void> {
+function discard(worker: Sandbox, why: string, untilGone = false): Promise<void> {
   console.log(`[pool] destroying ${worker.id}: ${why}`);
-  return destroyWorker(worker).catch((err) => console.error(`[pool] destroying ${worker.id} failed: ${errorMessage(err)}`));
+  return destroyWorker(worker, { untilGone }).catch((err) => console.error(`[pool] destroying ${worker.id} failed: ${errorMessage(err)}`));
 }
 
 async function forkOne(pool: Pool): Promise<void> {
@@ -75,7 +75,8 @@ export async function claimWarmWorker(offer: SignedManifest): Promise<Sandbox | 
       refill(pool);
       return worker;
     }
-    void discard(worker, `found ${worker.status} at claim time`);
+    // Wait until its quota slot is free, since the sale forks on demand next.
+    await discard(worker, `found ${worker.status} at claim time`, true);
   }
   // No refill on a miss: the sale is about to fork on demand and should not race a pool fork for quota.
   return null;

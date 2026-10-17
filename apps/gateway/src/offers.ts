@@ -132,6 +132,21 @@ export async function listOffers(): Promise<SignedManifest[]> {
   return offers.filter((offer): offer is SignedManifest => offer !== null);
 }
 
+/**
+ * Parent sandbox ids of every offer the gateway knows, listed or not: baked, published, foils, hidden,
+ * underpriced and withdrawn. Forks of these are workers; the parents themselves must never be touched.
+ */
+export async function offerParentIds(): Promise<Set<string>> {
+  const ids = new Set([...(await idsIn(config.offersDir)), ...(await idsIn(config.publishedOffersDir))]);
+  const parents = new Set<string>();
+  for (const id of ids) {
+    const [baked, published] = await Promise.all([readBaked(id), readPublished(id)]);
+    if (baked) parents.add(baked.offer.manifest.parentSandboxId);
+    if (published && !("removed" in published)) parents.add(published.offer.manifest.parentSandboxId);
+  }
+  return parents;
+}
+
 async function writePublished(offerId: string, record: PublishedRecord): Promise<void> {
   await mkdir(config.publishedOffersDir, { recursive: true });
   const path = join(config.publishedOffersDir, `${offerId}.json`);
