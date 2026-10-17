@@ -1,0 +1,54 @@
+[buyer.step] start · contract.docx · gateway https://production-polygraph.tyzo.nodeops.app · pay link · mode worker
+[buyer.step] discover · reading https://production-polygraph.tyzo.nodeops.app/llms.txt, /openapi.json and /offers
+[buyer.step] discovered · Polygraph gateway · $0.50 · 3 offers
+[buyer.step] verify-offer · offer_0481f7367d6a · Document to PDF (test foil B) · $0.50
+[buyer.check] PASS Seller signature covers this manifest · key SHA256:NyqDEQK6vjCwgXEP…
+[buyer.check] PASS Seller key is the one you pinned · SHA256:NyqDEQK6vjCwgXEP8v30B9VnnbozwOykm2bo_vG-Xec · pinned SHA256:NyqDEQK6vjCwgXEP… on 2026-10-17
+[buyer.check] PASS Parent sandbox exists · sb-01m55sjt4rtgw2ah036ww2dhks found on CreateOS (devbox:1)
+[buyer.check] PASS Parent is paused · CreateOS status: paused
+[buyer.check] PASS Egress matches the signed claim · claimed [127.0.0.1:9] · CreateOS [127.0.0.1:9]
+[buyer.check] PASS Egress is deny-by-default · 1 allowed, everything else blocked by CreateOS
+[buyer.step] verify-offer · offer_7c9e27eca00f · Document to PDF (LibreOffice) · $0.50
+[buyer.check] PASS Seller signature covers this manifest · key SHA256:NyqDEQK6vjCwgXEP…
+[buyer.check] PASS Seller key is the one you pinned · SHA256:NyqDEQK6vjCwgXEP8v30B9VnnbozwOykm2bo_vG-Xec · pinned SHA256:NyqDEQK6vjCwgXEP… on 2026-10-17
+[buyer.check] PASS Parent sandbox exists · sb-01m55xnadd6p0d29vvsxx1ynnj found on CreateOS (devbox:1)
+[buyer.check] PASS Parent is paused · CreateOS status: paused
+[buyer.check] PASS Egress matches the signed claim · claimed [127.0.0.1:9] · CreateOS [127.0.0.1:9]
+[buyer.check] PASS Egress is deny-by-default · 1 allowed, everything else blocked by CreateOS
+[buyer.step] verify-offer · offer_eab139be782e · Document to PDF (tampered live) · $0.50
+[buyer.check] PASS Seller signature covers this manifest · key SHA256:NyqDEQK6vjCwgXEP…
+[buyer.check] PASS Seller key is the one you pinned · SHA256:NyqDEQK6vjCwgXEP8v30B9VnnbozwOykm2bo_vG-Xec · pinned SHA256:NyqDEQK6vjCwgXEP… on 2026-10-17
+[buyer.check] PASS Parent sandbox exists · sb-01m5618bwetve668p5qge1ksja found on CreateOS (devbox:1)
+[buyer.check] PASS Parent is paused · CreateOS status: paused
+[buyer.check] FAIL Egress matches the signed claim · claimed [127.0.0.1:9] · CreateOS [] (no rules, open internet)
+[buyer.check] FAIL Egress is deny-by-default · CreateOS has no egress rules for this sandbox
+[buyer.refused] REFUSED offer_eab139be782e · Egress matches the signed claim: claimed [127.0.0.1:9] · CreateOS [] (no rules, open internet); Egress is deny-by-default: CreateOS has no egress rules for this sandbox
+[buyer.step] pay · $0.50 for offer_0481f7367d6a via Link wallet (needs approval in the Link app)
+[buyer.step] awaiting-approval · approve lsrq_1URgmq2MTaK9i47GpJHgYSyZ in the Link app: https://app.link.com/activity/approve/lsrq_1URgmq2MTaK9i47GpJHgYSyZ
+[buyer.step] paid · pi_3URgu5QwaSeLdSm40559yn2j · worker sb-01m562nvmn1wf3yh0dpkkvhwrp
+[buyer.step] verify-worker · sb-01m562nvmn1wf3yh0dpkkvhwrp · purchase pur_e27aa6a0-9702-4ca8-8924-d0dd40a79f21
+[buyer.check] PASS Grant is for the offer paid for · grant offer_0481f7367d6a · paid offer_0481f7367d6a
+[buyer.check] PASS Payment receipt matches the grant · receipt pi_3URgu5QwaSeLdSm40559yn2j · grant pi_3URgu5QwaSeLdSm40559yn2j
+[buyer.check] PASS Grant names the trusted CreateOS API · grant https://api-eu.sb.createos.sh · buyer https://api-eu.sb.createos.sh
+[buyer.check] PASS Worker is visible with its token · sb-01m562nvmn1wf3yh0dpkkvhwrp (devbox:1)
+[buyer.check] PASS Worker was forked from the signed parent · forked_from sb-01m55sjt4rtgw2ah036ww2dhks · signed parent sb-01m55sjt4rtgw2ah036ww2dhks
+[buyer.check] PASS Worker egress matches the signed claim · claimed [127.0.0.1:9] · CreateOS [127.0.0.1:9]
+[buyer.check] PASS Worker is running · CreateOS status: running
+[buyer.check] FAIL Tool files hashed by the buyer match the signed digest · 4 files, 33929 bytes · signed 88cb90ae5b196649… · buyer e15714f63be17427…
+[buyer.check] FAIL Tool digest computed in the worker matches · signed 88cb90ae5b196649… · worker e15714f63be17427…
+[buyer.check] PASS LibreOffice packages are unmodified · 16 packages match dpkg checksums, 34 doc/man files absent as on the stock image
+[buyer.check] PASS No added Python startup hooks · 3 hook files, all stock and unchanged
+[buyer.refused] REFUSED offer_0481f7367d6a · after payment, document withheld: Tool files hashed by the buyer match the signed digest: 4 files, 33929 bytes · signed 88cb90ae5b196649… · buyer e15714f63be17427…; Tool digest computed in the worker matches: signed 88cb90ae5b196649… · worker e15714f63be17427…
+[buyer.step] refund-requested · pur_e27aa6a0-9702-4ca8-8924-d0dd40a79f21 · Tool files hashed by the buyer match the signed digest: 4 files, 33929 bytes · signed 88cb90ae5b196649… · buyer e15714f63be17427…; Tool digest computed in the worker matches: signed 88cb90ae5b196649… · worker e15714f63be17427…
+[buyer.step] pay · $0.50 for offer_7c9e27eca00f via Link wallet (needs approval in the Link app)
+[buyer.step] awaiting-approval · approve lsrq_1URgup2MTaK9i47GF6xkzC0g in the Link app: https://app.link.com/activity/approve/lsrq_1URgup2MTaK9i47GF6xkzC0g
+[buyer.step] payment-failed · offer_7c9e27eca00f · gateway answered HTTP 504 after payment: HTML error page "nodeops.app | 504: Gateway time-out"
+[buyer.step] no-purchase · no offer passed verification and delivered
+
+Offers
+offer               price  outcome                 evidence
+──────────────────  ─────  ──────────────────────  ────────────────────────────────────────────────────────────────────────
+offer_eab139be782e  $0.50  refused before payment  Egress matches the signed claim: claimed [127.0.0.1:9] · CreateOS [] (n…
+offer_0481f7367d6a  $0.50  refunded                Tool files hashed by the buyer match the signed digest: 4 files, 33929 …
+offer_7c9e27eca00f  $0.50  failed                  gateway answered HTTP 504 after payment: HTML error page "nodeops.app |…
+
