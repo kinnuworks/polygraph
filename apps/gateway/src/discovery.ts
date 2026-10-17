@@ -44,12 +44,20 @@ const freeRoutes: Record<string, Record<string, Operation>> = {
   },
   "/offers/{id}/inspect": {
     get: {
-      summary: "Get a short-lived CreateOS token for the offer's paused parent sandbox, to check its egress and status before paying",
+      summary: "Get a short-lived CreateOS token for the offer's paused parent sandbox, to check its egress and status before paying. Revoked about 60 s after it is issued; the next inspect replaces it.",
       parameters: [offerId],
       responses: {
         "200": {
           description: "Inspection token",
-          ...json({ type: "object", properties: { parentSandboxId: { type: "string" }, token: { type: "string" }, platformUrl: { type: "string" } } }),
+          ...json({
+            type: "object",
+            properties: {
+              parentSandboxId: { type: "string" },
+              token: { type: "string" },
+              platformUrl: { type: "string" },
+              expiresAt: { type: "string", format: "date-time", description: "The token is revoked about this time, or earlier if another inspect of the same offer replaces it." },
+            },
+          }),
         },
         "404": { description: "No such offer" },
         "502": { description: "CreateOS did not issue a token" },

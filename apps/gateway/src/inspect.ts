@@ -1,26 +1,66 @@
 import type { Hono } from "hono";
 import { config } from "./config.js";
 import { getOffer } from "./offers.js";
-import { mintAccessToken } from "./sandbox.js";
+import { issueAccessToken, revokeAccessToken } from "./sandbox.js";
 
-interface CachedToken {
-  token: string;
-  expiresAt: number;
+interface LiveToken {
+  revokeAt: number;
+  timer: NodeJS.Timeout;
 }
 
-const cache = new Map<string, Promise<CachedToken>>();
+/**
+ * Each inspect gets a freshly rotated token, which ends the previous one, since CreateOS keeps one token
+ * per sandbox. The current token is revoked a fixed time after it was issued.
+ */
+const live = new Map<string, LiveToken>();
+const queues = new Map<string, Promise<unknown>>();
 
-/** Shares one token per parent for a few minutes, so a burst of buyers does not mint one each. */
-function parentToken(parentSandboxId: string): Promise<CachedToken> {
-  const cached = cache.get(parentSandboxId);
-  if (cached) return cached;
-  const minted = mintAccessToken(parentSandboxId).then((token) => ({ token, expiresAt: Date.now() + config.inspectTokenTtlMs }));
-  cache.set(parentSandboxId, minted);
-  minted.then(
-    ({ expiresAt }) => setTimeout(() => cache.delete(parentSandboxId), expiresAt - Date.now()).unref(),
-    () => cache.delete(parentSandboxId),
+/** Runs token operations for one parent one at a time, so a revoke never races an issue. */
+function serialized<T>(parentSandboxId: string, task: () => Promise<T>): Promise<T> {
+  const run = (queues.get(parentSandboxId) ?? Promise.resolve()).then(task, task);
+  const settled = run.then(
+    () => undefined,
+    () => undefined,
   );
-  return minted;
+  queues.set(parentSandboxId, settled);
+  void settled.then(() => {
+    if (queues.get(parentSandboxId) === settled) queues.delete(parentSandboxId);
+  });
+  return run;
+}
+
+/** Revokes the parent's token once it is due; an inspect queued just before the timer fired pushes the due time back. */
+function revoke(parentSandboxId: string, force = false): Promise<void> {
+  return serialized(parentSandboxId, async () => {
+    const entry = live.get(parentSandboxId);
+    if (!entry || (!force && Date.now() < entry.revokeAt)) return;
+    clearTimeout(entry.timer);
+    live.delete(parentSandboxId);
+    try {
+      await revokeAccessToken(parentSandboxId);
+      console.log(`[inspect] revoked the inspect token for ${parentSandboxId}`);
+    } catch (err) {
+      console.error(`[inspect] ${(err as Error).message}`);
+    }
+  });
+}
+
+function handOut(parentSandboxId: string): Promise<{ token: string; expiresAt: string }> {
+  return serialized(parentSandboxId, async () => {
+    const token = await issueAccessToken(parentSandboxId);
+    const previous = live.get(parentSandboxId);
+    if (previous) clearTimeout(previous.timer);
+    const revokeAt = Date.now() + config.inspectTokenTtlMs;
+    const timer = setTimeout(() => void revoke(parentSandboxId), config.inspectTokenTtlMs);
+    timer.unref();
+    live.set(parentSandboxId, { revokeAt, timer });
+    return { token, expiresAt: new Date(revokeAt).toISOString() };
+  });
+}
+
+/** Revokes every inspect token still live, for shutdown. */
+export async function revokeInspectTokens(): Promise<void> {
+  await Promise.all([...live.keys()].map((parentSandboxId) => revoke(parentSandboxId, true)));
 }
 
 export function registerInspectRoutes(app: Hono): void {
@@ -29,8 +69,8 @@ export function registerInspectRoutes(app: Hono): void {
     if (!offer) return c.json({ error: "offer not found" }, 404);
     const { parentSandboxId } = offer.manifest;
     try {
-      const { token } = await parentToken(parentSandboxId);
-      return c.json({ parentSandboxId, token, platformUrl: config.createos.baseUrl });
+      const { token, expiresAt } = await handOut(parentSandboxId);
+      return c.json({ parentSandboxId, token, platformUrl: config.createos.baseUrl, expiresAt });
     } catch (err) {
       console.error(`[inspect] ${parentSandboxId}: ${(err as Error).message}`);
       return c.json({ error: "could not get an inspection token from CreateOS for this offer's parent sandbox" }, 502);

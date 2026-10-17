@@ -25,9 +25,9 @@ A valid signature only shows who made the claims. The next steps check whether t
 
 GET ${base}/offers/{offerId}/inspect returns:
 
-  { "parentSandboxId": "...", "token": "skp_sb_...", "platformUrl": "https://..." }
+  { "parentSandboxId": "...", "token": "skp_sb_...", "platformUrl": "https://...", "expiresAt": "..." }
 
-The token is a CreateOS access token that only works for that one parent sandbox. Ask CreateOS directly:
+The token is a CreateOS access token that only works for that one parent sandbox. It is short-lived: the gateway revokes it about 60 seconds after issuing it (expiresAt), and the next inspect of the same offer, by anyone, replaces it. Run your check straight away, and if the token is rejected, call inspect again. Ask CreateOS directly:
 
   GET {platformUrl}/v1/sandboxes/{parentSandboxId}
   X-Api-Key: {token}
@@ -55,7 +55,7 @@ On success you get 200, a Payment-Receipt header, and this JSON body:
     "expiresAt": "..."
   }
 
-For this purchase the gateway forked a new worker from the offer's parent, mixed fresh randomness into it so it does not share random state with other workers, and minted a token that only works for that worker. It also wrote offerId, parentSandboxId, workerSandboxId, artifactDigest and purchaseId into the Stripe PaymentIntent metadata, so the charge records exactly which sandboxes it paid for.
+For this purchase the gateway gave you a worker forked from the offer's parent that no one else has used. To save time it may have been forked a little before your payment and kept running, unused, until then. At sale time the gateway mixed fresh randomness into it, so it does not share random state with other workers, and minted a token that only works for that worker. It also wrote offerId, parentSandboxId, workerSandboxId, artifactDigest and purchaseId into the Stripe PaymentIntent metadata, so the charge records exactly which sandboxes it paid for.
 
 If the worker cannot be created, the gateway refunds the payment and answers 502 with "refunded": true.
 

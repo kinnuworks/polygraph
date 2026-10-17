@@ -11,6 +11,13 @@ if (missing.length > 0) {
 
 const env = (name: (typeof REQUIRED)[number]) => process.env[name] as string;
 
+function parsePoolSize(raw: string | undefined): number {
+  if (raw === undefined || raw === "") return 1;
+  const size = Number(raw);
+  if (!Number.isInteger(size) || size < 0) throw new Error(`POOL_SIZE must be a whole number of workers, got "${raw}"`);
+  return size;
+}
+
 const repoRoot = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../..");
 
 export const config = {
@@ -29,8 +36,16 @@ export const config = {
   },
   /** Card payments through Stripe SPTs have a $0.50 minimum. */
   defaultPriceUsd: "0.50",
-  /** How long an inspect token for a parent sandbox is reused before a fresh one is minted. */
-  inspectTokenTtlMs: 4 * 60_000,
+  /** An inspect token for a parent sandbox is revoked this long after it was last handed out. */
+  inspectTokenTtlMs: 60_000,
+  /** Running workers kept pre-forked per offer, so a sale skips the fork wait. */
+  poolSize: parsePoolSize(process.env.POOL_SIZE),
+  /** How often pools are refilled and checked, and untracked workers destroyed. */
+  sweepIntervalMs: 60_000,
+  /** After CreateOS refuses a fork for quota or credit reasons, pools stop forking for this long. */
+  forkBackoffMs: 2 * 60_000,
+  /** Workers the gateway created and has not destroyed, kept on disk so a crash leaves nothing behind after the next start. */
+  ledgerPath: resolve(fileURLToPath(new URL(".", import.meta.url)), "../.runtime/workers.json"),
   /** A worker that is never marked done is destroyed after this long. */
   purchaseTtlMs: 15 * 60_000,
 } as const;

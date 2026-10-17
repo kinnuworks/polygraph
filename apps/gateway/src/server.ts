@@ -5,13 +5,17 @@ import { config } from "./config.js";
 import { registerDiscoveryRoutes } from "./discovery.js";
 import { registerEventRoutes } from "./events.js";
 import { registerInspectRoutes } from "./inspect.js";
+import { handleShutdownSignals, startBackgroundWork } from "./lifecycle.js";
 import { registerOfferRoutes } from "./offers.js";
+import { pooledWorkerIds } from "./pool.js";
 import { registerPurchaseRoutes } from "./purchase.js";
 
 const app = new Hono();
 const startedAt = Date.now();
 
-app.get("/health", (c) => c.json({ ok: true, uptimeSeconds: Math.round((Date.now() - startedAt) / 1000) }));
+app.get("/health", (c) =>
+  c.json({ ok: true, uptimeSeconds: Math.round((Date.now() - startedAt) / 1000), warmWorkers: pooledWorkerIds().size, poolSizePerOffer: config.poolSize }),
+);
 
 registerEventRoutes(app);
 registerOfferRoutes(app);
@@ -27,6 +31,8 @@ app.onError((err, c) => {
   return c.json({ error: "internal error" }, 500);
 });
 
-serve({ fetch: app.fetch, port: config.port }, (info) => {
-  console.log(`Polygraph gateway listening on http://localhost:${info.port}`);
+const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
+  console.log(`Polygraph gateway listening on http://localhost:${info.port}, keeping ${config.poolSize} warm worker(s) per offer`);
 });
+handleShutdownSignals(() => server.close());
+startBackgroundWork();
