@@ -148,6 +148,17 @@ async function payWithLink(url: string, expectedCents: number, offer: OfferManif
   const polled = await waitForApproval(spendRequestId);
   if (polled.status !== "approved") throw new PaymentDeclined(`Link spend request ended as ${String(polled.status)}`);
 
+  // The approved request carries the shared payment token. Paying with it directly avoids link-cli's
+  // re-probe, which rejects the fresh per-issuance nonce mppx servers put in every 402 challenge.
+  const spt = await approvedToken(spendRequestId, polled);
+  if (typeof spt === "string" && spt.startsWith("spt_")) {
+    const mppx = Mppx.create({ polyfill: false, methods: [stripe({ paymentMethod: typeof polled.payment_method === "string" ? polled.payment_method : "link", createToken: async () => spt })] });
+    const prepared = await mppx.prepareRequest(url, { method: "POST" }, { requirePayment: true });
+    assertChallengeAmount(prepared.payment.challenge.request, expectedCents);
+    const res = await prepared.payment.pay();
+    return { status: res.status, receiptHeader: res.headers.get("payment-receipt"), body: await res.text() };
+  }
+
   const paid = hasNext
     ? await linkCli(continuation(started, "pay_argv"))
     : await linkCli(["mpp", "pay", url, "-X", "POST", "--test", "--spend-request-id", spendRequestId]);
@@ -157,6 +168,17 @@ async function payWithLink(url: string, expectedCents: number, offer: OfferManif
     receiptHeader: typeof headers["payment-receipt"] === "string" ? headers["payment-receipt"] : null,
     body: typeof paid.body === "string" ? paid.body : JSON.stringify(paid.body ?? null),
   };
+}
+
+/** The token is attached a few seconds after the status flips to approved, so re-read for up to 30 s. */
+async function approvedToken(spendRequestId: string, approved: Record<string, unknown>): Promise<string | undefined> {
+  const tokenOf = (r: Record<string, unknown>) => (isRecord(r.shared_payment_token) && typeof r.shared_payment_token.id === "string" ? r.shared_payment_token.id : undefined);
+  let spt = tokenOf(approved);
+  for (let i = 0; !spt && i < 10; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
+    spt = tokenOf(await linkCli(["spend-request", "retrieve", spendRequestId]));
+  }
+  return spt;
 }
 
 /** Polls a spend request until the person approves or declines it in the Link app (up to 10 minutes). */
