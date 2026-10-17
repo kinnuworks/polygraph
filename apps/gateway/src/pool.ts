@@ -102,7 +102,9 @@ export function pooledWorkerIds(): Set<string> {
 /** Matches pools to the offers on disk, drops workers that stopped running, and tops every pool up. */
 export async function syncPools(): Promise<void> {
   if (draining) return;
-  const offers = await listOffers();
+  const offers = (await listOffers()).filter(
+    (offer) => config.poolOffers.size === 0 || config.poolOffers.has(offer.manifest.offerId),
+  );
   const current = new Map(offers.map((offer) => [offer.manifest.offerId, offer.manifest.parentSandboxId]));
 
   for (const pool of [...pools.values()]) {

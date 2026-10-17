@@ -40,6 +40,8 @@ export const config = {
   inspectTokenTtlMs: 60_000,
   /** Running workers kept pre-forked per offer, so a sale skips the fork wait. */
   poolSize: parsePoolSize(process.env.POOL_SIZE),
+  /** Offer ids that get a warm pool. Empty means every offer; set it when sandbox quota is tight. */
+  poolOffers: new Set((process.env.POOL_OFFERS ?? "").split(",").map((id) => id.trim()).filter(Boolean)),
   /** How often pools are refilled and checked, and untracked workers destroyed. */
   sweepIntervalMs: 60_000,
   /** After CreateOS refuses a fork for quota or credit reasons, pools stop forking for this long. */
