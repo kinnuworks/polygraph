@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en" data-accent="amber">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Polygraph · The lie detector for agent commerce</title>
+  <meta name="description" content="Don't trust the seller. Ask the platform. Polygraph checks a seller's claims against CreateOS before a buying agent pays with Stripe.">
+  <meta name="theme-color" content="#FFFFFF">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7.2' fill='%231D1D1F'/%3E%3Cpath d='M5 16.5h3.2l1.8-4.5 2.6 9 2.6-11.5 1.9 7 2.3 2.9 7.1-8.4' fill='none' stroke='%23F7A028' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    document.documentElement.classList.add('js');
+    if (/[?&]console=(1|true)\b/.test(location.search)) document.documentElement.classList.add('console-mode');
+  </script>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-mark" viewBox="0 0 32 32"><rect width="32" height="32" rx="7.2" fill="#1D1D1F"/><path d="M5 16.5h3.2l1.8-4.5 2.6 9 2.6-11.5 1.9 7 2.3 2.9 7.1-8.4" fill="none" stroke="#F7A028" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-box" viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6l8-3z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></symbol>
+    <symbol id="i-card" viewBox="0 0 24 24"><rect x="3" y="5.5" width="18" height="13" rx="2.5"/><path d="M3 10h18"/><path d="M7 14.5h3"/></symbol>
+    <symbol id="i-scan" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></symbol>
+    <symbol id="i-term" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M7.5 10l3 2.5-3 2.5"/><path d="M12.5 15.5h4"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></symbol>
+    <symbol id="i-expand" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M10 20H4v-6"/><path d="M20 4l-6.5 6.5"/><path d="M4 20l6.5-6.5"/></symbol>
+    <symbol id="i-replay" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7L4 8.5"/><path d="M4 4v4.5h4.5"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M7 17L17 7"/><path d="M8.5 7H17v8.5"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M6 13l6 6 6-6"/></symbol>
+  </svg>
+
+  <header class="nav">
+    <nav class="nav__bar" aria-label="Main">
+      <a class="nav__brand" href="#top">
+        <svg class="app-icon" aria-hidden="true"><use href="#i-mark"/></svg>
+        Polygraph
+      </a>
+      <div class="nav__links">
+        <a href="#how">How it works</a>
+        <a href="#console">Live console</a>
+        <a href="#receipts">Receipts</a>
+      </div>
+      <a class="btn btn-ink btn-sm" href="#console">Watch it live</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="container hero__text">
+        <span class="badge badge--dot">Built on CreateOS Sandbox and Stripe machine payments</span>
+        <h1>Don't trust the seller. Ask the <span class="hl">platform</span>.</h1>
+        <p class="lead">Polygraph checks a seller's claims against CreateOS's own records before your agent pays. If one is false, the agent refuses and no payment is created.</p>
+        <div class="cta-row">
+          <a class="btn btn-candy btn-lg" href="#console">Watch it live
+            <svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-down"/></svg>
+          </a>
+          <a class="btn btn-outline btn-lg" href="#how">How it works</a>
+        </div>
+        <p class="trust"><span>$0.50 per job, paid by the agent</span><span>Stripe test mode</span><span>No payment if a check fails</span></p>
+      </div>
+
+      <div class="container container--wide hero__visual bleed" id="console">
+        <div class="stage console-stage">
+          <div class="window window--dark console" id="console-window" data-mode="live">
+            <div class="window__bar">
+              <div class="lights" aria-hidden="true"><i></i><i></i><i></i></div>
+              <span class="window__title">Polygraph · Live console</span>
+              <div class="console__bar-end">
+                <span class="conn" data-el="conn" data-state="connecting">Connecting</span>
+              </div>
+            </div>
+
+            <div class="console__toolbar">
+              <ol class="phases" aria-label="Progress">
+                <li class="phase" data-phase="0"><span class="phase__mark" aria-hidden="true">1</span>Create</li>
+                <li class="phases__sep" aria-hidden="true"></li>
+                <li class="phase" data-phase="1"><span class="phase__mark" aria-hidden="true">2</span>Distrust</li>
+                <li class="phases__sep" aria-hidden="true"></li>
+                <li class="phase" data-phase="2"><span class="phase__mark" aria-hidden="true">3</span>Pay</li>
+                <li class="phases__sep" aria-hidden="true"></li>
+                <li class="phase" data-phase="3"><span class="phase__mark" aria-hidden="true">4</span>Run</li>
+              </ol>
+              <div class="console__tools">
+                <span class="preview-tag" data-el="preview-tag" hidden>Preview data</span>
+                <button class="tool-btn" type="button" data-el="replay" hidden>
+                  <svg fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-replay"/></svg>
+                  <span>Replay</span>
+                </button>
+                <a class="tool-btn" data-el="fullscreen" href="?console=1">
+                  <svg fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-expand"/></svg>
+                  <span>Full screen</span>
+                </a>
+              </div>
+            </div>
+
+            <div class="console__grid">
+              <section class="col col--seller" aria-labelledby="col-seller">
+                <header class="col__head">
+                  <span class="col__icon"><svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-box"/></svg></span>
+                  <div><h2 class="col__title" id="col-seller">Seller agent</h2><p class="col__sub">Builds, tests and attacks the tool</p></div>
+                  <span class="pill" data-el="seller-pill">Waiting</span>
+                </header>
+                <div class="col__fixed">
+                  <div class="tests" data-el="tests">
+                    <div class="tests__row">
+                      <span class="mini-label">Tests</span>
+                      <span class="tests__runs" data-el="test-runs">no runs yet</span>
+                    </div>
+                    <div class="tests__nums">
+                      <span class="num num--pass"><b data-el="test-pass">0</b> passed</span>
+                      <span class="num num--fail"><b data-el="test-fail">0</b> failed</span>
+                    </div>
+                    <div class="tests__bar" aria-hidden="true"><i data-el="test-bar-pass"></i><i data-el="test-bar-fail"></i></div>
+                  </div>
+                  <div class="attacks">
+                    <div class="tests__row"><span class="mini-label">Attacks</span><span class="tests__runs" data-el="attack-sum"></span></div>
+                    <ul class="attack-grid" data-el="attacks"></ul>
+                  </div>
+                </div>
+                <div class="col__scroll" data-el="seller-scroll">
+                  <ol class="feed" data-el="seller-feed"></ol>
+                </div>
+              </section>
+
+              <section class="col col--trust" aria-labelledby="col-trust">
+                <header class="col__head">
+                  <span class="col__icon"><svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-shield"/></svg></span>
+                  <div><h2 class="col__title" id="col-trust">Trust check</h2><p class="col__sub">Signed claims against CreateOS records</p></div>
+                  <span class="pill" data-el="trust-pill">Idle</span>
+                </header>
+                <div class="col__scroll" data-el="offers-scroll">
+                  <div class="offers" data-el="offers"></div>
+                </div>
+              </section>
+
+              <section class="col col--buyer" aria-labelledby="col-buyer">
+                <header class="col__head">
+                  <span class="col__icon"><svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-card"/></svg></span>
+                  <div><h2 class="col__title" id="col-buyer">Buyer agent</h2><p class="col__sub">Verifies, pays, runs the job</p></div>
+                  <span class="pill" data-el="buyer-pill">Waiting</span>
+                </header>
+                <div class="col__fixed">
+                  <div class="pay" data-el="pay" data-state="empty">
+                    <div class="tests__row"><span class="mini-label">Payment</span><span class="tests__runs" data-el="pay-note">none yet</span></div>
+                    <div class="pay__body" data-el="pay-body"><p class="pay__empty">Nothing is paid until every check passes.</p></div>
+                  </div>
+                  <div class="vm" data-el="vm" data-state="0">
+                    <div class="vm__digit" data-el="vm-digit" role="img" aria-label="Workers running: 0"><span class="vm__num">0</span></div>
+                    <div class="vm__text">
+                      <p class="vm__label">Workers running</p>
+                      <p class="vm__meta" data-el="vm-meta">No worker forked yet</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="col__scroll" data-el="buyer-scroll">
+                  <ol class="feed" data-el="buyer-feed"></ol>
+                </div>
+              </section>
+            </div>
+
+            <p class="visually-hidden" aria-live="polite" aria-atomic="true" data-el="live"></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section--alt after-bleed" id="how">
+      <div class="container">
+        <div class="section-head">
+          <span class="eyebrow"><span class="dot"></span>How it works</span>
+          <h2>The buyer pays only after the platform agrees.</h2>
+          <p class="lead">The seller's offer is a signed list of claims. The buyer checks each one with CreateOS before any money moves.</p>
+        </div>
+        <ol class="steps">
+          <li class="step reveal" style="--i:0">
+            <span class="icon-tile"><svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-box"/></svg></span>
+            <span class="step__num">01</span>
+            <h3 class="t-title">Create</h3>
+            <p>A seller agent wraps an open-source tool in a CreateOS sandbox, tests and attacks it, then publishes a signed offer.</p>
+          </li>
+          <li class="step reveal" style="--i:1">
+            <span class="icon-tile"><svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-scan"/></svg></span>
+            <span class="step__num">02</span>
+            <h3 class="t-title">Distrust</h3>
+            <p>The buyer reads the sandbox's real egress and status from CreateOS and compares them with what the offer claims.</p>
+          </li>
+          <li class="step reveal" style="--i:2">
+            <span class="icon-tile"><svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-card"/></svg></span>
+            <span class="step__num">03</span>
+            <h3 class="t-title">Pay</h3>
+            <p>An offer that matches gets $0.50 through Stripe machine payments. One mismatch and no payment is created.</p>
+          </li>
+          <li class="step reveal" style="--i:3">
+            <span class="icon-tile"><svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-term"/></svg></span>
+            <span class="step__num">04</span>
+            <h3 class="t-title">Run</h3>
+            <p>The job runs in a fresh worker forked from the sandbox the buyer checked, and the buyer keeps a receipt.</p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="section" id="receipts">
+      <div class="container split">
+        <div>
+          <span class="eyebrow"><span class="dot"></span>Receipts</span>
+          <h2 class="t-h3">Every job ends with a receipt you can check yourself.</h2>
+          <p class="lead">Each id points at a record the seller can't edit: the PaymentIntent in Stripe, the worker and its parent sandbox in CreateOS, and the sha256 of the document that went in and the PDF that came out.</p>
+          <ul class="checklist">
+            <li><span>The worker's <code class="t-mono">forked_from</code> matches the parent named in the signed offer.</span></li>
+            <li><span>The tool digest is recomputed inside the worker, not taken from the seller.</span></li>
+            <li><span>The worker is destroyed when the job is done.</span></li>
+          </ul>
+        </div>
+        <div class="stage stage--soft receipt-stage reveal">
+          <div class="receipt receipt--light" data-el="receipt-section" aria-live="off">
+            <div class="receipt__empty">
+              <p class="t-title">No receipt yet</p>
+              <p class="t-small">When the buyer agent finishes a job, its receipt shows up here.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <a class="nav__brand" href="#top"><svg class="app-icon" aria-hidden="true"><use href="#i-mark"/></svg>Polygraph</a>
+      <span>The lie detector for agent commerce. Built on CreateOS Sandbox and Stripe.</span>
+      <a class="footer__link" href="?console=1">Full-screen console</a>
+    </div>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
