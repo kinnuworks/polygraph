@@ -1,4 +1,4 @@
-import { CreateosSandboxClient, CreateosSandboxRateLimitError, sleep, type CreateSandboxRequest, type ForkSandboxRequest, type Sandbox } from "@nodeops-createos/sandbox";
+import { CreateosSandboxClient, CreateosSandboxNotFoundError, CreateosSandboxRateLimitError, sleep, type CreateSandboxRequest, type ForkSandboxRequest, type Sandbox } from "@nodeops-createos/sandbox";
 import { PLATFORM_URL, emit } from "@polygraph/core";
 
 export const SHAPE = "s-2vcpu-4gb";
@@ -18,8 +18,8 @@ export interface ShellResult {
   ms: number;
 }
 
-const QUOTA_RETRY_MS = 15_000;
-const QUOTA_RETRIES = 20;
+const QUOTA_RETRY_MS = 5_000;
+const QUOTA_RETRIES = 48;
 
 /** The account caps concurrent sandboxes (paused ones count), so a 429 means wait for a slot, not fail. */
 async function withQuotaRetry<T>(label: string, attempt: () => Promise<T>): Promise<T> {
@@ -28,7 +28,9 @@ async function withQuotaRetry<T>(label: string, attempt: () => Promise<T>): Prom
       return await attempt();
     } catch (err) {
       if (!(err instanceof CreateosSandboxRateLimitError) || tries >= QUOTA_RETRIES) throw err;
-      await emit({ type: "seller.step", step: "quota", detail: `${label}: sandbox quota full, retrying in ${QUOTA_RETRY_MS / 1000} s (${tries}/${QUOTA_RETRIES})` });
+      const note = `${label}: sandbox quota full, retrying every ${QUOTA_RETRY_MS / 1000} s`;
+      if (tries === 1) await emit({ type: "seller.step", step: "quota", detail: note });
+      else console.log(`  ${note} (${tries}/${QUOTA_RETRIES})`);
       await sleep(QUOTA_RETRY_MS);
     }
   }
@@ -93,11 +95,12 @@ export class SandboxRegistry {
     return sandbox;
   }
 
-  /** Forks a paused source and waits for the copy to be running. */
+  /** Forks a paused source and waits for the copy to settle: paused with `start_paused`, otherwise running. */
   async fork(source: Sandbox, role: string, request: ForkSandboxRequest = {}): Promise<Sandbox> {
     const copy = await withQuotaRetry(`fork ${role}`, () => source.fork(request));
     this.owned.set(copy.id, { sandbox: copy, role, keep: false });
-    await copy.waitUntilRunning({ timeoutMs: 120_000 });
+    if (request.start_paused) await copy.waitUntilPaused({ timeoutMs: 240_000 });
+    else await copy.waitUntilRunning({ timeoutMs: 240_000 });
     return copy;
   }
 
@@ -128,6 +131,15 @@ export class SandboxRegistry {
 
   describe(): string[] {
     return [...this.owned.values()].map(({ sandbox, role, keep }) => `${role} ${sandbox.id}${keep ? " (kept)" : ""}`);
+  }
+}
+
+/** Destroys a sandbox this run did not create (an earlier foil). A sandbox that is already gone is fine. */
+export async function destroyById(client: CreateosSandboxClient, id: string): Promise<void> {
+  try {
+    await (await client.getSandbox(id)).destroy();
+  } catch (err) {
+    if (!(err instanceof CreateosSandboxNotFoundError)) throw err;
   }
 }
 

@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Sandbox } from "@nodeops-createos/sandbox";
 import { ARTIFACT_DIGEST_COMMAND, TOOL_DIR, emit, loadSigningKey, signManifest, type OfferManifest, type SignedManifest } from "@polygraph/core";
@@ -64,20 +64,43 @@ export async function publishOffer(manifest: OfferManifest, foil?: FoilKind): Pr
   return signed;
 }
 
-/** Finds the genuine offer previously published for a parent sandbox, so it can be republished without a rebuild. */
-export async function findOfferForParent(parentSandboxId: string): Promise<SignedManifest | undefined> {
+export interface StoredOffer {
+  signed: SignedManifest;
+  /** Set when a sidecar marks the offer as a foil. */
+  foil?: FoilKind;
+}
+
+/** Every offer on disk with its foil label, newest first. */
+export async function listStoredOffers(): Promise<StoredOffer[]> {
   let names: string[];
   try {
     names = await readdir(OFFERS_DIR);
   } catch {
-    return undefined;
+    return [];
   }
-  const foils = new Set(names.filter((n) => n.endsWith(".foil.json")).map((n) => n.replace(/\.foil\.json$/, "")));
-  const candidates: SignedManifest[] = [];
+  const offers: StoredOffer[] = [];
   for (const name of names) {
-    if (!name.endsWith(".json") || name.endsWith(".foil.json") || foils.has(name.replace(/\.json$/, ""))) continue;
+    if (!name.startsWith("offer_") || !name.endsWith(".json") || name.endsWith(".foil.json")) continue;
     const signed = JSON.parse(await readFile(join(OFFERS_DIR, name), "utf8")) as SignedManifest;
-    if (signed.manifest?.parentSandboxId === parentSandboxId) candidates.push(signed);
+    const sidecar = join(OFFERS_DIR, name.replace(/\.json$/, ".foil.json"));
+    const foil = names.includes(basename(sidecar)) ? (JSON.parse(await readFile(sidecar, "utf8")) as { foil: FoilKind }).foil : undefined;
+    offers.push({ signed, foil });
   }
-  return candidates.sort((a, b) => (a.manifest.createdAt < b.manifest.createdAt ? 1 : -1))[0];
+  return offers.sort((a, b) => (a.signed.manifest.createdAt < b.signed.manifest.createdAt ? 1 : -1));
+}
+
+/** The genuine offer with this id, or the newest genuine offer when no id is given. */
+export async function findGenuineOffer(offerId?: string): Promise<SignedManifest | undefined> {
+  const genuine = (await listStoredOffers()).filter((offer) => !offer.foil);
+  return (offerId ? genuine.find((offer) => offer.signed.manifest.offerId === offerId) : genuine[0])?.signed;
+}
+
+/** Finds the genuine offer previously published for a parent sandbox, so it can be republished without a rebuild. */
+export async function findOfferForParent(parentSandboxId: string): Promise<SignedManifest | undefined> {
+  return (await listStoredOffers()).find((offer) => !offer.foil && offer.signed.manifest.parentSandboxId === parentSandboxId)?.signed;
+}
+
+export async function removeOffer(offerId: string): Promise<void> {
+  await rm(join(OFFERS_DIR, `${offerId}.json`), { force: true });
+  await rm(join(OFFERS_DIR, `${offerId}.foil.json`), { force: true });
 }
