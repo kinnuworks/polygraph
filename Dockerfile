@@ -9,4 +9,4 @@ RUN npm ci --include=dev --no-audit --no-fund
 COPY data/offers ./data/offers
 COPY data/events ./data/events
 EXPOSE 4242
-CMD ["npx", "tsx", "apps/gateway/src/server.ts"]
+CMD ["node", "--import", "tsx", "apps/gateway/src/server.ts"]
