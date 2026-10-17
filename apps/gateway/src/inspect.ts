@@ -1,6 +1,7 @@
 import type { Hono } from "hono";
 import { config } from "./config.js";
 import { getOffer } from "./offers.js";
+import { clientAddress, RateLimiter } from "./ratelimit.js";
 import { issueAccessToken, revokeAccessToken } from "./sandbox.js";
 
 interface LiveToken {
@@ -63,10 +64,24 @@ export async function revokeInspectTokens(): Promise<void> {
   await Promise.all([...live.keys()].map((parentSandboxId) => revoke(parentSandboxId, true)));
 }
 
+/** Every inspect rotates the parent's token and so cuts off the previous holder; these limits keep that from being abused. */
+const perClient = new RateLimiter(config.inspectLimits.perClient.burst, config.inspectLimits.perClient.refillMs);
+const perOffer = new RateLimiter(config.inspectLimits.perOffer.burst, config.inspectLimits.perOffer.refillMs);
+
 export function registerInspectRoutes(app: Hono): void {
   app.get("/offers/:id/inspect", async (c) => {
+    const retryClient = perClient.take(clientAddress(c));
+    if (retryClient > 0) {
+      c.header("Retry-After", String(retryClient));
+      return c.json({ error: `too many inspect requests from this address; retry in ${retryClient} s` }, 429);
+    }
     const offer = await getOffer(c.req.param("id"));
     if (!offer) return c.json({ error: "offer not found" }, 404);
+    const retryOffer = perOffer.take(offer.manifest.offerId);
+    if (retryOffer > 0) {
+      c.header("Retry-After", String(retryOffer));
+      return c.json({ error: `too many inspect requests for this offer; retry in ${retryOffer} s` }, 429);
+    }
     const { parentSandboxId } = offer.manifest;
     try {
       const { token, expiresAt } = await handOut(parentSandboxId);

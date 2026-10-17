@@ -1,8 +1,9 @@
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
 import { generate } from "mppx/discovery";
 import { config } from "./config.js";
 import { llmsTxt } from "./llms.js";
 import { chargeCard, mppx } from "./payments.js";
+import { PURCHASE_SECRET_HEADER } from "./purchase.js";
 
 type Operation = Record<string, unknown>;
 
@@ -19,7 +20,7 @@ const offerSchema = {
 
 const grantSchema = {
   type: "object",
-  required: ["purchaseId", "offerId", "workerSandboxId", "workerToken", "platformUrl", "paymentIntentId", "expiresAt"],
+  required: ["purchaseId", "offerId", "workerSandboxId", "workerToken", "platformUrl", "paymentIntentId", "expiresAt", "purchaseSecret"],
   properties: {
     purchaseId: { type: "string" },
     offerId: { type: "string" },
@@ -28,7 +29,16 @@ const grantSchema = {
     platformUrl: { type: "string" },
     paymentIntentId: { type: "string" },
     expiresAt: { type: "string", format: "date-time" },
+    purchaseSecret: { type: "string", description: `Send as the ${PURCHASE_SECRET_HEADER} header to refund and done. Returned only here.` },
   },
+};
+
+const secretHeader = { name: PURCHASE_SECRET_HEADER, in: "header", required: true, description: "purchaseSecret from the purchase grant", schema: { type: "string" } };
+
+const checksSchema = {
+  type: "array",
+  description: "The gateway's own checks of the worker, made with the owner key",
+  items: { type: "object", properties: { id: { type: "string" }, label: { type: "string" }, status: { enum: ["pass", "fail"] }, detail: { type: "string" } } },
 };
 
 const offerId = idParam("id", "offerId from the manifest");
@@ -60,20 +70,32 @@ const freeRoutes: Record<string, Record<string, Operation>> = {
           }),
         },
         "404": { description: "No such offer" },
+        "429": { description: "Rate limited, per client address and per offer; see Retry-After" },
         "502": { description: "CreateOS did not issue a token" },
       },
     },
   },
   "/purchases/{id}/refund": {
     post: {
-      summary: "Refund an active purchase whose worker failed verification, and destroy the worker",
-      parameters: [purchaseId],
+      summary:
+        "Ask for a refund. The gateway re-checks the worker's lineage, egress and tool digest itself and refunds only if one fails and no job input has been uploaded; the worker is then destroyed.",
+      parameters: [purchaseId, secretHeader],
       requestBody: { required: false, ...json({ type: "object", properties: { reason: { type: "string" } } }) },
-      responses: { "200": { description: "Refunded" }, "404": { description: "No such purchase" }, "409": { description: "Purchase is not active" } },
+      responses: {
+        "200": { description: "A check failed; refunded", ...json({ type: "object", properties: { refunded: { const: true }, refundId: { type: "string" }, checks: checksSchema } }) },
+        "401": { description: "Missing or wrong purchase secret" },
+        "404": { description: "No such purchase" },
+        "409": { description: "Not refunded: every check passed, a job already started, or the purchase is not active", ...json({ type: "object", properties: { refunded: { const: false }, error: { type: "string" }, checks: checksSchema } }) },
+        "502": { description: "The worker could not be checked, or Stripe refused the refund" },
+      },
     },
   },
   "/purchases/{id}/done": {
-    post: { summary: "Destroy the purchase's worker after the job", parameters: [purchaseId], responses: { "200": { description: "Worker destroyed" }, "404": { description: "No such purchase" } } },
+    post: {
+      summary: "Destroy the purchase's worker after the job",
+      parameters: [purchaseId, secretHeader],
+      responses: { "200": { description: "Worker destroyed" }, "401": { description: "Missing or wrong purchase secret" }, "404": { description: "No such purchase" } },
+    },
   },
   "/events": {
     get: { summary: "Server-Sent Events feed; replays the last 200 events, then streams", responses: { "200": { description: "text/event-stream" } } },
@@ -85,16 +107,16 @@ const freeRoutes: Record<string, Record<string, Operation>> = {
   },
 };
 
-function buildDocument(): Record<string, unknown> {
+function buildDocument(baseUrl: string): Record<string, unknown> {
   const doc = generate(mppx, {
     info: { title: "Polygraph gateway", version: "0.1.0" },
     serviceInfo: {
       categories: ["compute", "documents"],
-      docs: { homepage: config.publicUrl, llms: `${config.publicUrl}/llms.txt` },
+      docs: { homepage: baseUrl, llms: `${baseUrl}/llms.txt` },
     },
     routes: [
       {
-        handler: chargeCard({ amount: config.defaultPriceUsd, description: "One job in a fresh worker forked from the offer's verified parent sandbox" }),
+        handler: chargeCard({ amount: config.minPriceUsd.toFixed(2), description: "One job in a fresh worker forked from the offer's verified parent sandbox" }),
         method: "POST",
         path: "/offers/{id}/buy",
         requestBody: { required: false, ...json({ type: "object", description: "No body is needed; the offer is named in the path." }) },
@@ -112,16 +134,46 @@ function buildDocument(): Record<string, unknown> {
     "404": { description: "No such offer" },
     "502": { description: "The worker could not be created; the payment was refunded" },
   };
-  return { ...doc, servers: [{ url: config.publicUrl }], paths: { ...freeRoutes, ...paths } };
+  return { ...doc, servers: [{ url: baseUrl }], paths: { ...freeRoutes, ...paths } };
+}
+
+const HOST = /^[A-Za-z0-9.-]+(:\d{1,5})?$/;
+
+/**
+ * The base URL agents should use: POLYGRAPH_GATEWAY_URL when set, otherwise the scheme and host the
+ * request came in on (X-Forwarded-Proto and X-Forwarded-Host first, as set by a TLS proxy). A spoofed
+ * header only changes the document returned to that caller, and hosts are checked so it cannot inject text.
+ */
+function baseUrlFor(c: Context): string {
+  if (config.publicUrl) return config.publicUrl;
+  const url = new URL(c.req.url);
+  const forwardedProto = c.req.header("x-forwarded-proto")?.split(",")[0]?.trim();
+  const forwardedHost = c.req.header("x-forwarded-host")?.split(",")[0]?.trim();
+  const proto = forwardedProto === "https" || forwardedProto === "http" ? forwardedProto : url.protocol.slice(0, -1);
+  const host = [forwardedHost, c.req.header("host")].find((h): h is string => !!h && HOST.test(h)) ?? url.host;
+  return `${proto}://${host}`;
+}
+
+/** Documents are built once per base URL; there are only ever a few. */
+const cache = new Map<string, { openapi: string; llms: string }>();
+
+function documentsFor(baseUrl: string): { openapi: string; llms: string } {
+  let docs = cache.get(baseUrl);
+  if (!docs) {
+    docs = { openapi: JSON.stringify(buildDocument(baseUrl)), llms: llmsTxt(baseUrl) };
+    if (cache.size < 20) cache.set(baseUrl, docs);
+  }
+  return docs;
 }
 
 export function registerDiscoveryRoutes(app: Hono): void {
-  const document = JSON.stringify(buildDocument());
-  const guide = llmsTxt(config.publicUrl);
-
   app.get("/openapi.json", (c) => {
     c.header("Cache-Control", "public, max-age=300");
-    return c.body(document, 200, { "Content-Type": "application/json" });
+    c.header("Vary", "Host, X-Forwarded-Host, X-Forwarded-Proto");
+    return c.body(documentsFor(baseUrlFor(c)).openapi, 200, { "Content-Type": "application/json" });
   });
-  app.get("/llms.txt", (c) => c.text(guide));
+  app.get("/llms.txt", (c) => {
+    c.header("Vary", "Host, X-Forwarded-Host, X-Forwarded-Proto");
+    return c.text(documentsFor(baseUrlFor(c)).llms);
+  });
 }

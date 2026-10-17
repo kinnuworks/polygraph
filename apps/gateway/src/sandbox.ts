@@ -51,6 +51,9 @@ export async function forkWorker(parentSandboxId: string): Promise<Sandbox> {
   return worker;
 }
 
+/** Reads a sandbox with the owner key. */
+export const getSandbox = (sandboxId: string): Promise<Sandbox> => client.getSandbox(sandboxId);
+
 /** Re-reads the worker and reports whether it can take a job right now. */
 export async function isRunning(worker: Sandbox): Promise<boolean> {
   try {

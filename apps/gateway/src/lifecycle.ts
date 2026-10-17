@@ -1,7 +1,7 @@
 import { config } from "./config.js";
 import { revokeInspectTokens } from "./inspect.js";
 import { drainPools, pooledWorkerIds, syncPools } from "./pool.js";
-import { activePurchaseWorkerIds, releaseAllPurchases } from "./purchase.js";
+import { activePurchaseWorkerIds } from "./purchase.js";
 import { destroyWorker } from "./sandbox.js";
 import { adoptPreviousRun, trackedWorkers } from "./workers.js";
 
@@ -57,14 +57,18 @@ export function startBackgroundWork(): void {
 
 let stopping = false;
 
-/** Destroys every worker the gateway owns and revokes live inspect tokens. A second signal exits at once. */
+/**
+ * Destroys pooled and orphaned workers and revokes live inspect tokens. Workers of active purchases stay
+ * up: purchases are kept on disk, so buyers can still finish, refund or call done after a restart.
+ * A second signal exits at once.
+ */
 export function handleShutdownSignals(stopAccepting: () => void): void {
   const stop = async (signal: NodeJS.Signals) => {
     if (stopping) process.exit(1);
     stopping = true;
-    console.log(`[gateway] ${signal}: destroying workers and revoking tokens`);
+    console.log(`[gateway] ${signal}: destroying pooled workers and revoking tokens`);
     stopAccepting();
-    await Promise.allSettled([drainPools(), releaseAllPurchases(), revokeInspectTokens()]);
+    await Promise.allSettled([drainPools(), revokeInspectTokens()]);
     await sweepRemaining();
     process.exit(0);
   };
@@ -72,8 +76,9 @@ export function handleShutdownSignals(stopAccepting: () => void): void {
   process.on("SIGTERM", (signal) => void stop(signal));
 }
 
-/** Anything still tracked after the owners released their workers. */
+/** Anything still tracked that no active purchase holds, such as a fork that was still starting. */
 async function sweepRemaining(): Promise<void> {
-  const remaining = trackedWorkers().map(({ id }) => id);
+  const kept = activePurchaseWorkerIds();
+  const remaining = trackedWorkers().map(({ id }) => id).filter((id) => !kept.has(id));
   if (remaining.length > 0) await destroyAll(remaining, "gateway shutting down");
 }

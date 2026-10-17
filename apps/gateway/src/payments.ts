@@ -19,23 +19,30 @@ export const mppx = Mppx.create({
 /** The one payment method in use: Stripe shared payment tokens (cards and Link). */
 export const chargeCard = mppx["stripe/charge"];
 
-const PRICE = /^\d{1,4}(\.\d{1,2})?$/;
-
-/** Uses the manifest price when it is a plain dollar amount at or above the card minimum. */
-export function priceFor(priceUsd: string | undefined): string {
-  if (priceUsd && PRICE.test(priceUsd) && Number(priceUsd) >= Number(config.defaultPriceUsd)) return priceUsd;
-  return config.defaultPriceUsd;
-}
-
+/**
+ * Refunds a payment in full. Stripe's reason codes describe a customer's request or fraud, which fits
+ * neither a failed worker nor a failed check, so the reason goes in metadata instead.
+ */
 export async function refundPayment(paymentIntentId: string, reason: string): Promise<string> {
   const refund = await stripeClient.refunds.create({
     payment_intent: paymentIntentId,
-    reason: "requested_by_customer",
-    metadata: { polygraphReason: reason.slice(0, 500) },
+    metadata: { polygraph_refund_reason: reason.slice(0, 500) },
   });
   return refund.id;
 }
 
+const METADATA_ATTEMPTS = 3;
+
+/** Writes metadata onto the PaymentIntent, retrying with a short backoff. Throws after the last attempt. */
 export async function tagPayment(paymentIntentId: string, metadata: Record<string, string>): Promise<void> {
-  await stripeClient.paymentIntents.update(paymentIntentId, { metadata });
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await stripeClient.paymentIntents.update(paymentIntentId, { metadata });
+      return;
+    } catch (err) {
+      if (attempt >= METADATA_ATTEMPTS) throw err;
+      console.warn(`[payments] metadata update on ${paymentIntentId} failed (attempt ${attempt} of ${METADATA_ATTEMPTS}): ${(err as Error).message}`);
+      await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+    }
+  }
 }

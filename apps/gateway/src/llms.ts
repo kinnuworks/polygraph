@@ -37,7 +37,9 @@ Compare the response with the manifest:
 - data.egress must match manifest.egress. On CreateOS an empty list means unrestricted network access, so an offer that claims a short allowlist but whose parent has an empty list is not telling the truth.
 - data.status should be "paused". Workers can only be forked from a paused parent.
 
-If anything differs, do not buy. The gateway lists every offer it finds; it does not remove dishonest ones for you. This check is how you catch them.
+If anything differs, do not buy. The gateway does not judge offers for you; this check is how you catch dishonest ones.
+
+Inspect is rate-limited per client address and per offer, because each call replaces the previous token. A 429 answer carries a Retry-After header.
 
 ## 4. Pay
 
@@ -52,8 +54,11 @@ On success you get 200, a Payment-Receipt header, and this JSON body:
     "workerToken": "skp_sb_...",
     "platformUrl": "https://...",
     "paymentIntentId": "pi_...",
-    "expiresAt": "..."
+    "expiresAt": "...",
+    "purchaseSecret": "..."
   }
+
+Keep purchaseSecret private. It is shown only in this response, and refund and done require it in the x-purchase-secret header.
 
 For this purchase the gateway gave you a worker forked from the offer's parent that no one else has used. To save time it may have been forked a little before your payment and kept running, unused, until then. At sale time the gateway mixed fresh randomness into it, so it does not share random state with other workers, and minted a token that only works for that worker. It also wrote offerId, parentSandboxId, workerSandboxId, artifactDigest and purchaseId into the Stripe PaymentIntent metadata, so the charge records exactly which sandboxes it paid for.
 
@@ -77,7 +82,9 @@ Then recompute the sha256 of the packaged tool inside the worker, using the exec
 
 and compare the result with manifest.artifactDigest.
 
-If anything differs, do not upload anything. Call POST ${base}/purchases/{purchaseId}/refund, optionally with a JSON body { "reason": "..." }. The gateway refunds the payment and destroys the worker. A refund is only possible while the purchase is active, before you call done.
+If anything differs, do not upload anything. Call POST ${base}/purchases/{purchaseId}/refund with the header x-purchase-secret: {purchaseSecret}, optionally with a JSON body { "reason": "..." }.
+
+The gateway does not take your word for it. With its own owner key it re-reads the worker's lineage and egress from CreateOS and recomputes the tool digest inside the worker. It refunds only if one of those checks fails and nothing has been uploaded to /tmp/polygraph-job/in yet; then it destroys the worker. Otherwise it answers 409 and leaves the worker running. Either way the response lists its checks with the values it saw. A refund is only possible while the purchase is active, before you call done.
 
 ## 6. Run the job
 
@@ -85,7 +92,7 @@ Use the same token with CreateOS's exec and file endpoints to upload your input,
 
 ## 7. Finish
 
-POST ${base}/purchases/{purchaseId}/done destroys the worker. Workers that are never marked done are destroyed at expiresAt.
+POST ${base}/purchases/{purchaseId}/done, with the same x-purchase-secret header, destroys the worker. Workers that are never marked done are destroyed at expiresAt.
 
 ## What these checks prove, and what they do not
 

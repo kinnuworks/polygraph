@@ -8,6 +8,7 @@ import { registerInspectRoutes } from "./inspect.js";
 import { handleShutdownSignals, startBackgroundWork } from "./lifecycle.js";
 import { registerOfferRoutes } from "./offers.js";
 import { pooledWorkerIds } from "./pool.js";
+import { registerPublishRoutes } from "./publish.js";
 import { registerPurchaseRoutes } from "./purchase.js";
 
 const app = new Hono();
@@ -19,6 +20,7 @@ app.get("/health", (c) =>
 
 registerEventRoutes(app);
 registerOfferRoutes(app);
+registerPublishRoutes(app);
 registerInspectRoutes(app);
 registerPurchaseRoutes(app);
 registerDiscoveryRoutes(app);

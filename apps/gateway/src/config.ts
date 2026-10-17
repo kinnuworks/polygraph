@@ -18,12 +18,24 @@ function parsePoolSize(raw: string | undefined): number {
   return size;
 }
 
-const repoRoot = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../..");
+const here = fileURLToPath(new URL(".", import.meta.url));
+const repoRoot = resolve(here, "../../..");
+const runtimeDir = resolve(here, "../.runtime");
 
 export const config = {
   port: Number(process.env.PORT ?? 4242),
-  publicUrl: (process.env.POLYGRAPH_GATEWAY_URL ?? "http://localhost:4242").replace(/\/+$/, ""),
+  /** Public base URL for discovery documents. Unset means it is derived from each request. */
+  publicUrl: process.env.POLYGRAPH_GATEWAY_URL ? process.env.POLYGRAPH_GATEWAY_URL.replace(/\/+$/, "") : undefined,
+  /** Behind a reverse proxy, the client address and public host come from X-Forwarded-* headers. */
+  trustProxy: process.env.TRUST_PROXY === "1",
+  /** Offers with a foil sidecar are listed only for demos. */
+  demoFoils: process.env.DEMO_FOILS === "1",
+  /** Offers baked into the deployment. */
   offersDir: resolve(repoRoot, "data/offers"),
+  /** Offers published at runtime through the publish API, and tombstones for removed ones. */
+  publishedOffersDir: resolve(runtimeDir, "offers"),
+  /** Shared secret for POST /offers and DELETE /offers/:id. Unset disables both routes. */
+  publishToken: process.env.PUBLISH_TOKEN || undefined,
   webRoot: resolve(repoRoot, "apps/web/public"),
   createos: {
     apiKey: env("CREATEOS_SANDBOX_API_KEY"),
@@ -34,10 +46,15 @@ export const config = {
     profileId: env("STRIPE_PROFILE_ID"),
     mppSecretKey: env("MPP_SECRET_KEY"),
   },
-  /** Card payments through Stripe SPTs have a $0.50 minimum. */
-  defaultPriceUsd: "0.50",
-  /** An inspect token for a parent sandbox is revoked this long after it was last handed out. */
+  /** Card payments through Stripe SPTs have a $0.50 minimum; cheaper offers are not listed. */
+  minPriceUsd: 0.5,
+  /** An inspect token for a parent sandbox is revoked this long after it was issued. */
   inspectTokenTtlMs: 60_000,
+  /** Inspect rate limits: token buckets per client address and per offer. Each inspect rotates the parent's token. */
+  inspectLimits: {
+    perClient: { burst: 3, refillMs: 5_000 },
+    perOffer: { burst: 6, refillMs: 2_000 },
+  },
   /** Running workers kept pre-forked per offer, so a sale skips the fork wait. */
   poolSize: parsePoolSize(process.env.POOL_SIZE),
   /** Offer ids that get a warm pool. Empty means every offer; set it when sandbox quota is tight. */
@@ -49,7 +66,9 @@ export const config = {
   /** After CreateOS refuses a fork for quota or credit reasons, pools stop forking for this long. */
   forkBackoffMs: 2 * 60_000,
   /** Workers the gateway created and has not destroyed, kept on disk so a crash leaves nothing behind after the next start. */
-  ledgerPath: resolve(fileURLToPath(new URL(".", import.meta.url)), "../.runtime/workers.json"),
+  ledgerPath: resolve(runtimeDir, "workers.json"),
+  /** Purchases, so refund and done keep working across a restart. */
+  purchasesPath: resolve(runtimeDir, "purchases.json"),
   /** A worker that is never marked done is destroyed after this long. */
   purchaseTtlMs: 15 * 60_000,
 } as const;
