@@ -82,6 +82,7 @@ export type PolygraphEvent =
   | { type: "buyer.check"; ts: string; offerId: string; check: CheckResult }
   | { type: "buyer.refused"; ts: string; offerId: string; reason: string }
   | { type: "payment.created"; ts: string; paymentIntentId: string; amountUsd: string }
+  | { type: "payment.refunded"; ts: string; paymentIntentId: string; reason: string }
   | { type: "worker.forked"; ts: string; workerSandboxId: string; parentSandboxId: string; ms: number }
   | { type: "worker.destroyed"; ts: string; workerSandboxId: string }
   | { type: "job.completed"; ts: string; receipt: Receipt };
