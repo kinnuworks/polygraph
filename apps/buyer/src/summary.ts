@@ -16,7 +16,7 @@ export interface RunSummary {
 const clip = (text: string, width: number) => (text.length > width ? `${text.slice(0, width - 1)}…` : text);
 
 /** Plain aligned columns; long cells are clipped to `maxCell` so rows stay on one line. */
-function table(headers: string[], rows: string[][], maxCell: number): string {
+export function formatTable(headers: string[], rows: string[][], maxCell: number): string {
   const cells = [headers, ...rows].map((row) => row.map((cell) => clip(cell, maxCell)));
   const widths = headers.map((_, i) => Math.max(...cells.map((row) => (row[i] ?? "").length)));
   const line = (row: string[]) => row.map((cell, i) => cell.padEnd(widths[i] ?? 0)).join("  ").trimEnd();
@@ -27,7 +27,7 @@ function table(headers: string[], rows: string[][], maxCell: number): string {
 
 export function printSummary(summary: RunSummary): void {
   const offers = summary.offers.map((row) => [row.offerId, `$${row.priceUsd}`, row.outcome, row.evidence]);
-  console.log(`\nOffers\n${table(["offer", "price", "outcome", "evidence"], offers, 72)}`);
-  if (summary.job.length > 0) console.log(`\nJob\n${table(["field", "value"], summary.job, 120)}`);
+  console.log(`\nOffers\n${formatTable(["offer", "price", "outcome", "evidence"], offers, 72)}`);
+  if (summary.job.length > 0) console.log(`\nJob\n${formatTable(["field", "value"], summary.job, 120)}`);
   console.log("");
 }

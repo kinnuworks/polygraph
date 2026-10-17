@@ -2,12 +2,12 @@ import { access } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { emit, type PurchaseGrant, type SignedManifest } from "@polygraph/core";
 import { discover } from "./discover.js";
-import { postJson } from "./http.js";
 import { runJob, type JobResult } from "./job.js";
 import { runOwned } from "./own.js";
 import { buyOffer, PaidRequestFailed, PaymentDeclined, type PayMode, type Payment } from "./pay.js";
 import { buildReceipt, saveReceipt } from "./receipt.js";
 import { SellerPins } from "./pins.js";
+import { tellGateway } from "./purchases.js";
 import { printSummary, type OfferRow, type Outcome } from "./summary.js";
 import { RemoteSandbox } from "./worker.js";
 import { verifyOffer, verifyWorker, type Verdict, type WorkerVerdict } from "./verify.js";
@@ -45,16 +45,6 @@ async function refuse(offerId: string, reason: string): Promise<void> {
   await emit({ type: "buyer.refused", offerId, reason });
 }
 
-async function tellGateway(gateway: string, grant: PurchaseGrant, action: "refund" | "done", reason?: string): Promise<void> {
-  // The secret proves the call comes from the buyer; older gateways do not issue one.
-  const headers: Record<string, string> = grant.purchaseSecret ? { "x-purchase-secret": grant.purchaseSecret } : {};
-  try {
-    await postJson(`${gateway}/purchases/${encodeURIComponent(grant.purchaseId)}/${action}`, reason ? { reason } : {}, headers);
-    await emit({ type: "buyer.step", step: action === "refund" ? "refund-requested" : "released", detail: `${grant.purchaseId}${reason ? ` · ${reason}` : ""}` });
-  } catch (err) {
-    await emit({ type: "buyer.step", step: `${action}-failed`, detail: `${grant.purchaseId} · ${errorText(err)}` });
-  }
-}
 
 /**
  * Discovers offers, verifies each one against CreateOS (cheapest first), pays for the first that

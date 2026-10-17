@@ -10,6 +10,7 @@
     "gateway": "tsx --env-file=.env apps/gateway/src/server.ts",
     "seller": "tsx --env-file=.env apps/seller/src/cli.ts",
     "buyer": "tsx --env-file=.env apps/buyer/src/cli.ts",
+    "tamper-matrix": "tsx --env-file=.env apps/buyer/src/tamper-matrix.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "engines": {

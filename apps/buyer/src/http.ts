@@ -19,10 +19,25 @@ export class HttpError extends Error {
   }
 }
 
+const RATE_LIMIT_RETRIES = 3;
+
+/** Seconds to wait before retrying a 429: the Retry-After header, else the gateway's "retry in N s" hint, else 2. */
+function retryDelaySeconds(res: Response, body: string): number {
+  const header = Number(res.headers.get("retry-after"));
+  if (Number.isFinite(header) && header > 0) return Math.min(header, 30);
+  const hinted = Number(/retry in (\d+(?:\.\d+)?) ?s/.exec(body)?.[1]);
+  return Number.isFinite(hinted) && hinted > 0 ? Math.min(hinted, 30) : 2;
+}
+
+/** Fetches with a few polite retries when the gateway rate-limits us; any other error status throws. */
 async function request(url: string, init?: RequestInit): Promise<Response> {
-  const res = await fetch(url, init);
-  if (!res.ok) throw new HttpError(res.status, url, await res.text());
-  return res;
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(url, init);
+    if (res.ok) return res;
+    const body = await res.text();
+    if (res.status !== 429 || attempt >= RATE_LIMIT_RETRIES) throw new HttpError(res.status, url, body);
+    await new Promise((done) => setTimeout(done, retryDelaySeconds(res, body) * 1000));
+  }
 }
 
 export const getText = async (url: string) => (await request(url)).text();

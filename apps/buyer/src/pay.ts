@@ -68,7 +68,8 @@ function assertChallengeAmount(request: Record<string, unknown>, expectedCents: 
   }
 }
 
-async function payWithTestCard(url: string, expectedCents: number): Promise<PaidResponse> {
+/** Fetches the 402 challenge and checks its amount; no token exists until `pay()` is called on the result. */
+async function prepareTestPayment(url: string, expectedCents: number) {
   const secretKey = process.env.STRIPE_SECRET_KEY;
   if (!secretKey?.includes("_test_")) throw new Error("--pay test needs a test-mode STRIPE_SECRET_KEY");
 
@@ -78,8 +79,12 @@ async function payWithTestCard(url: string, expectedCents: number): Promise<Paid
   });
   const prepared = await mppx.prepareRequest(url, { method: "POST" }, { requirePayment: true });
   assertChallengeAmount(prepared.payment.challenge.request, expectedCents);
+  return prepared.payment;
+}
 
-  const res = await prepared.payment.pay();
+async function payWithTestCard(url: string, expectedCents: number): Promise<PaidResponse> {
+  const payment = await prepareTestPayment(url, expectedCents);
+  const res = await payment.pay();
   return { status: res.status, receiptHeader: res.headers.get("payment-receipt"), body: await res.text() };
 }
 
@@ -180,11 +185,21 @@ function receiptReference(header: string | null): string | null {
   }
 }
 
+const buyUrl = (gateway: string, offer: OfferManifest) => `${gateway}/offers/${encodeURIComponent(offer.offerId)}/buy`;
+
+/**
+ * Asks the gateway for its payment challenge and checks the amount against the signed price,
+ * stopping before any token is minted. Throws PaymentDeclined on a mismatch.
+ */
+export async function checkQuote(gateway: string, offer: OfferManifest): Promise<void> {
+  await prepareTestPayment(buyUrl(gateway, offer), usdToCents(offer.priceUsd));
+}
+
 /** Pays for one offer at its signed price and returns the worker grant the gateway hands back. */
 export async function buyOffer(gateway: string, offer: OfferManifest, mode: PayMode): Promise<Payment> {
   const expectedCents = usdToCents(offer.priceUsd);
   const amountUsd = centsToUsd(expectedCents);
-  const url = `${gateway}/offers/${encodeURIComponent(offer.offerId)}/buy`;
+  const url = buyUrl(gateway, offer);
   const via = mode === "test" ? "Stripe test card through a shared payment token" : "Link wallet (needs approval in the Link app)";
   await emit({ type: "buyer.step", step: "pay", detail: `$${amountUsd} for ${offer.offerId} via ${via}` });
 
