@@ -139,7 +139,8 @@ async function payWithLink(url: string, expectedCents: number, offer: OfferManif
 
   await emit({ type: "buyer.step", step: "awaiting-approval", detail: `approve ${spendRequestId} in the Link app: ${String(started.approval_url)}` });
   const hasNext = isRecord(started._next);
-  const polled = hasNext ? await linkCli(continuation(started, "poll_argv")) : await waitForApproval(spendRequestId);
+  // link-cli's own poll step returns at once while the request is still pending, so wait here instead.
+  const polled = await waitForApproval(spendRequestId);
   if (polled.status !== "approved") throw new PaymentDeclined(`Link spend request ended as ${String(polled.status)}`);
 
   const paid = hasNext
