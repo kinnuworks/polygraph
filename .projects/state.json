@@ -11,6 +11,12 @@
       "name": "createos-plan",
       "providerName": "createos",
       "serviceId": "free"
+    },
+    "createos-project": {
+      "livemode": true,
+      "name": "createos-project",
+      "providerName": "createos",
+      "serviceId": "project"
     }
   }
 }
