@@ -22,6 +22,9 @@ export const INTERFACE_CONTRACT = `Interface contract (other programs depend on 
 - Must work when two conversions run at the same time.
 - File names may contain spaces and non-ASCII characters.
 - The PDF must contain the input's text.
+- Output must be PDF/A-2b.
+- The PDF document title must equal the input document's title metadata when present (fall back to the file stem).
+- Spreadsheets must export every sheet, one or more pages per sheet.
 - Python standard library only; nothing may be installed with pip.
 - At run time the program has no outbound network access.`;
 
@@ -35,7 +38,7 @@ export class Workspace {
    * Writes changed files into TOOL_DIR and reports a unified diff for each one.
    * The diff is computed inside the sandbox against what is really on disk.
    */
-  async apply(changes: ToolFile[]): Promise<{ file: string; diff: string }[]> {
+  async apply(changes: ToolFile[], model: string): Promise<{ file: string; diff: string }[]> {
     const patches: { file: string; diff: string }[] = [];
     for (const change of changes) {
       if (this.files.get(change.path) === change.content) continue;
@@ -55,8 +58,8 @@ export class Workspace {
       if (result.exitCode !== 0) throw new Error(`could not write ${change.path}: ${result.stderr}`);
       this.files.set(change.path, change.content);
       patches.push({ file: change.path, diff: result.stdout });
-      console.log(`  ${change.path}: ${diffStat(result.stdout)}`);
-      await emit({ type: "seller.patch", file: change.path, diff: result.stdout });
+      console.log(`  ${change.path}: ${diffStat(result.stdout)} (written by ${model})`);
+      await emit({ type: "seller.patch", file: change.path, diff: result.stdout, model });
     }
     return patches;
   }
@@ -203,9 +206,9 @@ export async function testAndFix(options: {
     await options.onRun?.(run);
     if (run.ok || attempt === maxRuns) return { run, attempts: attempt };
     await emit({ type: "seller.step", step: "fix", detail: `${run.failed} failing, sending the real output back to the agent` });
-    const fix = await askForFiles(ENGINEER_SYSTEM, fixPrompt(brief, workspace, run, facts));
-    await emit({ type: "seller.step", step: "fix", detail: `agent: ${fix.summary}` });
-    const patches = await workspace.apply(fix.files);
+    const fix = await askForFiles("fix", ENGINEER_SYSTEM, fixPrompt(brief, workspace, run, facts));
+    await emit({ type: "seller.step", step: "fix", detail: `agent (${fix.model}): ${fix.summary}` });
+    const patches = await workspace.apply(fix.files, fix.model);
     if (patches.length === 0) await emit({ type: "seller.step", step: "fix", detail: "agent proposed no file changes" });
   }
 }
@@ -224,9 +227,9 @@ export async function buildTool(sandbox: Sandbox, repo: string): Promise<BuildRe
   const workspace = new Workspace(sandbox);
 
   await emit({ type: "seller.step", step: "write", detail: "agent is writing convert.py, tests and fixtures from a one-line spec" });
-  const first = await askForFiles(ENGINEER_SYSTEM, initialPrompt(repo, readme, facts));
-  await emit({ type: "seller.step", step: "write", detail: `agent: ${first.summary}` });
-  await workspace.apply(first.files);
+  const first = await askForFiles("draft", ENGINEER_SYSTEM, initialPrompt(repo, readme, facts));
+  await emit({ type: "seller.step", step: "write", detail: `agent (${first.model}): ${first.summary}` });
+  await workspace.apply(first.files, first.model);
 
   const { run, attempts } = await testAndFix({ sandbox, workspace, facts, brief: BUILD_BRIEF, phase: "test" });
   if (!run.ok) throw new Error(`tests still failing after ${attempts} runs; not publishing`);

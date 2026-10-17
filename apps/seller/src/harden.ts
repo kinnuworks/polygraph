@@ -86,9 +86,9 @@ export async function harden(sandbox: Sandbox, workspace: Workspace, facts: stri
   const networkCheck: CheckResult = { id: "egress-probe", label: "network locked", status: "pass", detail: probe.detail };
 
   await emit({ type: "seller.step", step: "harden", detail: `agent is adding robustness tests: ${CASES.map((c) => c.label).join("; ")}` });
-  const reply = await askForFiles(ENGINEER_SYSTEM, robustnessPrompt(workspace, facts));
-  await emit({ type: "seller.step", step: "harden", detail: `agent: ${reply.summary}` });
-  await workspace.apply(reply.files);
+  const reply = await askForFiles("draft", ENGINEER_SYSTEM, robustnessPrompt(workspace, facts));
+  await emit({ type: "seller.step", step: "harden", detail: `agent (${reply.model}): ${reply.summary}` });
+  await workspace.apply(reply.files, reply.model);
 
   let caseChecks: CheckResult[] = [];
   const { run, attempts } = await testAndFix({

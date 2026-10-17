@@ -2,7 +2,13 @@ import Anthropic from "@anthropic-ai/sdk";
 import { TOOL_DIR } from "@polygraph/core";
 
 const client = new Anthropic();
-const model = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5-5";
+
+/** Drafting (first versions of files) and fixing (patches from real failures) can use different models. */
+export const MODELS = {
+  draft: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5-5",
+  fix: process.env.SELLER_FIX_MODEL ?? process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5-5",
+} as const;
+export type ModelRole = keyof typeof MODELS;
 
 export interface ToolFile {
   path: string;
@@ -12,18 +18,8 @@ export interface ToolFile {
 export interface FilesReply {
   summary: string;
   files: ToolFile[];
-}
-
-export interface AttackPlan {
-  id: string;
-  label: string;
-  goal: string;
-  /** Python 3 source run in an empty working directory to create the hostile inputs. */
-  setup: string;
-  /** Arguments passed to convert.py, relative to that working directory. */
-  args: string[];
-  /** Bash run in the working directory afterwards; exit 0 means the attack got through. */
-  escapeCheck: string;
+  /** Model that wrote these files. */
+  model: string;
 }
 
 const fileSchema = {
@@ -40,29 +36,8 @@ const filesSchema = {
   additionalProperties: false,
 };
 
-const attackSchema = {
-  type: "object",
-  properties: {
-    id: { type: "string" },
-    label: { type: "string" },
-    goal: { type: "string" },
-    setup: { type: "string" },
-    args: { type: "array", items: { type: "string" } },
-    escapeCheck: { type: "string" },
-  },
-  required: ["id", "label", "goal", "setup", "args", "escapeCheck"],
-  additionalProperties: false,
-};
-
-const attacksSchema = {
-  type: "object",
-  properties: { attacks: { type: "array", items: attackSchema } },
-  required: ["attacks"],
-  additionalProperties: false,
-};
-
 /** One stateless request whose reply is constrained to `schema`. Every call carries the full context it needs. */
-async function askJson(system: string, prompt: string, schema: Record<string, unknown>): Promise<unknown> {
+async function askJson(model: string, system: string, prompt: string, schema: Record<string, unknown>): Promise<unknown> {
   const stream = client.messages.stream({
     model,
     max_tokens: 64_000,
@@ -93,31 +68,13 @@ function stripToolDir(path: string): string {
   return relative.replace(/^\.\//, "");
 }
 
-export async function askForFiles(system: string, prompt: string): Promise<FilesReply> {
-  const reply = (await askJson(system, prompt, filesSchema)) as FilesReply;
+export async function askForFiles(role: ModelRole, system: string, prompt: string): Promise<FilesReply> {
+  const model = MODELS[role];
+  const reply = (await askJson(model, system, prompt, filesSchema)) as Omit<FilesReply, "model">;
   // Absolute paths inside the tool directory are accepted and made relative; anything else is refused.
   const files = reply.files.map((file) => ({ ...file, path: stripToolDir(file.path) }));
   for (const file of files) {
     if (!isSafeRelativePath(file.path)) throw new Error(`model proposed an unsafe file path: ${file.path}`);
   }
-  return { summary: reply.summary, files };
+  return { summary: reply.summary, files, model };
 }
-
-export async function askForAttacks(system: string, prompt: string): Promise<AttackPlan[]> {
-  const reply = (await askJson(system, prompt, attacksSchema)) as { attacks: AttackPlan[] };
-  const seen = new Set<string>();
-  return reply.attacks.map((attack) => {
-    const id = attack.id.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "") || "attack";
-    const unique = seen.has(id) ? `${id}-${seen.size}` : id;
-    seen.add(unique);
-    return { ...attack, id: unique };
-  });
-}
-
-export async function askForAttack(system: string, prompt: string): Promise<AttackPlan> {
-  const [attack] = await askForAttacks(system, prompt);
-  if (!attack) throw new Error("model returned no attack");
-  return attack;
-}
-
-export const modelName = model;

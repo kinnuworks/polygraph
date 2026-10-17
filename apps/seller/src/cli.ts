@@ -5,7 +5,7 @@ import { acceptanceLoop } from "./acceptance.js";
 import { buildTool, provision } from "./build.js";
 import { createFoils } from "./foils.js";
 import { harden } from "./harden.js";
-import { modelName } from "./llm.js";
+import { MODELS } from "./llm.js";
 import { OFFER_DESCRIPTION, OFFER_NAME, PRICE_USD, computeDigest, findOfferForParent, newOfferId, publishOffer, readLicense } from "./publish.js";
 import { ROOTFS, SHAPE, SandboxRegistry, createClient, pauseAndWait, requireEnv } from "./sandbox.js";
 
@@ -55,7 +55,7 @@ process.once("SIGINT", () => {
 
 /** Steps 1 to 6: provision, write, test and fix, harden, acceptance, package, publish. */
 async function buildAndPublish(repo: string): Promise<{ parent: Sandbox; manifest: OfferManifest }> {
-  await emit({ type: "seller.step", step: "provision", detail: `creating ${SHAPE} ${ROOTFS} sandbox (model ${modelName})` });
+  await emit({ type: "seller.step", step: "provision", detail: `creating ${SHAPE} ${ROOTFS} sandbox (drafting ${MODELS.draft}, fixing ${MODELS.fix})` });
   const parent = await registry.create("parent", { shape: SHAPE, rootfs: ROOTFS });
   await emit({ type: "seller.step", step: "provision", detail: `sandbox ${parent.id} running, egress open for setup` });
 

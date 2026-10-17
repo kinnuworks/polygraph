@@ -99,9 +99,9 @@ export async function acceptanceLoop(sandbox: Sandbox, workspace: Workspace, fac
     if (round === MAX_ROUNDS) break;
 
     await emit({ type: "seller.step", step: "fix", detail: `${run.failed} acceptance failures, sending names and messages to the agent` });
-    const fix = await askForFiles(ENGINEER_SYSTEM, failurePrompt(workspace, facts, run));
-    await emit({ type: "seller.step", step: "fix", detail: `agent: ${fix.summary}` });
-    await workspace.apply(fix.files);
+    const fix = await askForFiles("fix", ENGINEER_SYSTEM, failurePrompt(workspace, facts, run));
+    await emit({ type: "seller.step", step: "fix", detail: `agent (${fix.model}): ${fix.summary}` });
+    await workspace.apply(fix.files, fix.model);
 
     const own = await testAndFix({ sandbox, workspace, facts, brief: HARDEN_BRIEF, phase: "acceptance", maxRuns: AGENT_RUNS_PER_ROUND });
     if (!own.run.ok) throw new Error(`agent's own tests failing after acceptance round ${round}; not publishing`);

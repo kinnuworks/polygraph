@@ -75,7 +75,7 @@ export interface Receipt {
 export type PolygraphEvent =
   | { type: "seller.step"; ts: string; step: string; detail?: string }
   | { type: "seller.test"; ts: string; passed: number; failed: number; output?: string }
-  | { type: "seller.patch"; ts: string; file: string; diff: string }
+  | { type: "seller.patch"; ts: string; file: string; diff: string; model?: string }
   | { type: "seller.attack"; ts: string; attack: string; status: "blocked" | "crashed" | "passed"; detail?: string }
   | { type: "offer.published"; ts: string; offer: SignedManifest }
   | { type: "buyer.step"; ts: string; step: string; detail?: string }

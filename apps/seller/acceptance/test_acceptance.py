@@ -1,13 +1,14 @@
 """Acceptance tests for the converter, written against the published interface only."""
 
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from conftest import CONVERTER, FORMATS, convert, describe, last_line, pdf_text, token
+from conftest import CONVERTER, DOCX_TITLE, FORMATS, SHEET_TOKENS, convert, describe, last_line, pdf_info, pdf_text, pdf_title, token
 
 
 def outdir_in(tmp_path: Path) -> Path:
@@ -101,3 +102,56 @@ def test_input_over_25_mb_exits_3(tmp_path):
     result = convert(source, out, timeout=120)
     assert result.returncode == 3, f"expected exit 3 for an input over 25 MB. {describe(result)}"
     assert not any(out.iterdir()), "nothing should be written for an oversized input"
+
+
+def pdfa_identification(pdf: Path) -> tuple[str, str]:
+    """Reads pdfaid:part and pdfaid:conformance from the XMP packet, in element or attribute form."""
+    xmp = pdf_info(pdf, "-meta") or pdf.read_bytes().decode("latin-1")
+    def field(name: str) -> str:
+        match = re.search(rf"pdfaid:{name}>\s*([^<\s]+)\s*<|pdfaid:{name}=[\"']([^\"']+)[\"']", xmp)
+        return (match.group(1) or match.group(2)) if match else ""
+    return field("part"), field("conformance")
+
+
+@pytest.mark.parametrize("fmt", ("docx", "xlsx"))
+def test_output_is_pdfa_2b(fmt, samples, tmp_path):
+    source = tmp_path / f"archive.{fmt}"
+    shutil.copy(samples[fmt], source)
+    out = outdir_in(tmp_path)
+    result = convert(source, out)
+    assert result.returncode == 0, f"expected exit 0. {describe(result)}"
+    part, conformance = pdfa_identification(out / "archive.pdf")
+    assert (part, conformance.upper()) == ("2", "B"), (
+        f"XMP metadata should identify PDF/A-2b (pdfaid:part 2, pdfaid:conformance B); found part={part!r} conformance={conformance!r}"
+    )
+
+
+def test_title_comes_from_document_metadata(samples, tmp_path):
+    source = tmp_path / "msa-final.docx"
+    shutil.copy(samples["titled-docx"], source)
+    out = outdir_in(tmp_path)
+    result = convert(source, out)
+    assert result.returncode == 0, f"expected exit 0. {describe(result)}"
+    title = pdf_title(out / "msa-final.pdf")
+    assert title == DOCX_TITLE, f"PDF Title should be the document's title metadata {DOCX_TITLE!r}; found {title!r}"
+
+
+def test_title_falls_back_to_file_stem(samples, tmp_path):
+    source = tmp_path / "Lease renewal 2026.odt"
+    shutil.copy(samples["odt"], source)
+    out = outdir_in(tmp_path)
+    result = convert(source, out)
+    assert result.returncode == 0, f"expected exit 0. {describe(result)}"
+    title = pdf_title(out / "Lease renewal 2026.pdf")
+    assert title == "Lease renewal 2026", f"PDF Title should fall back to the file stem 'Lease renewal 2026' when the input has no title; found {title!r}"
+
+
+def test_every_sheet_is_exported(samples, tmp_path):
+    source = tmp_path / "workbook.xlsx"
+    shutil.copy(samples["two-sheets"], source)
+    out = outdir_in(tmp_path)
+    result = convert(source, out)
+    assert result.returncode == 0, f"expected exit 0. {describe(result)}"
+    text = " ".join(pdf_text(out / "workbook.pdf").split())
+    missing = [t for t in SHEET_TOKENS if t not in text]
+    assert not missing, f"text from every sheet should appear in the PDF; missing {missing}; extracted: {text[:300]!r}"
