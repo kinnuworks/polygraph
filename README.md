@@ -54,6 +54,18 @@ Four acts, the same ones the dashboard shows live:
 
 A measured before and after: plain `soffice --convert-to pdf` fails 3 of the 17 archival acceptance tests (no PDF/A identification, no title fallback). The seller agent's tool passes all 17, and the PDF the buyer received in our live run declares PDF/A-2b in its metadata.
 
+### Latest verified run
+
+Against the live gateway on October 18, 2026 at 04:33 IST, in Stripe test mode, `npm run buyer -- --file apps/buyer/fixtures/contract.docx --gateway https://production-polygraph.tyzo.nodeops.app`:
+
+- The buyer checked both listed offers before paying either one.
+- `offer_0481f7367d6a` passed every pre-payment check and was paid. Then the buyer hashed the tool files in its worker itself, found they didn't match the signed digest, and the gateway re-checked and refunded the payment.
+- `offer_7c9e27eca00f` passed all 23 checks. Payment `pi_3URgTOQwaSeLdSm41HNkrBit` ($0.50), worker `sb-01m56139g223qe82vt4zh3jb6w` with `forked_from` = parent `sb-01m55xnadd6p0d29vvsxx1ynnj`, artifact digest `e1413d16…ad51`. The 2-page PDF (sha256 `a9a89716…a299`) converted in 2.0 s, and the whole run, with both purchases, took 119 s.
+
+The tamper matrix ran against the same live gateway a few minutes later: `npm run tamper-matrix -- --gateway https://production-polygraph.tyzo.nodeops.app`. **6 of 6 dishonest offers were refused.** Five were refused before any payment: an edited manifest, a lying egress claim, a different signing key, a price swap and a missing parent. The run created 0 PaymentIntents for those five. Cases 4 and 5 were signed with the seller's real key. The sixth, a tampered tool, was paid, caught when the buyer hashed the files, and refunded (`pi_3URgX4QwaSeLdSm41NHkyJwX`, refund `re_3URgX4QwaSeLdSm41bxUtXlm`). Full results are in [docs/runs/tamper-matrix.json](docs/runs/tamper-matrix.json).
+
+The seller's first build, including a failed draft and the fix that made all 17 hidden tests pass, is logged in [docs/runs/seller-build-with-fix.log](docs/runs/seller-build-with-fix.log).
+
 ### Every CreateOS call the buyer makes
 
 | Call | Token | What it proves |

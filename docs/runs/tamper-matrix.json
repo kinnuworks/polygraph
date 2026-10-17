@@ -1,0 +1,75 @@
+{
+  "gateway": "https://production-polygraph.tyzo.nodeops.app",
+  "startedAt": "2026-10-17T22:56:22.598Z",
+  "finishedAt": "2026-10-17T22:57:50.817Z",
+  "headline": "6 of 6 dishonest offers refused; 5 before any payment, 1 refunded after the buyer hashed the tool",
+  "prepaymentIntents": 0,
+  "sellerSigns": true,
+  "results": [
+    {
+      "id": "control",
+      "name": "genuine offer",
+      "offerId": "offer_7c9e27eca00f",
+      "expected": "all pass",
+      "outcome": "passed (control)",
+      "ok": true,
+      "evidence": "6 pre-payment checks passed, not bought"
+    },
+    {
+      "id": "1",
+      "name": "edited after signing (price 0.50 -> 0.01)",
+      "offerId": "offer_7c9e27eca00f",
+      "expected": "signature",
+      "outcome": "refused before payment",
+      "ok": true,
+      "evidence": "Seller signature covers this manifest · signed payload differs from the manifest shown"
+    },
+    {
+      "id": "2",
+      "name": "lying egress (live offer)",
+      "offerId": "offer_eab139be782e",
+      "expected": "egress-claim",
+      "outcome": "refused before payment",
+      "ok": true,
+      "evidence": "Egress matches the signed claim · claimed [127.0.0.1:9] · CreateOS [] (no rules, open internet)"
+    },
+    {
+      "id": "3",
+      "name": "re-signed by a different key",
+      "offerId": "offer_7c9e27eca00f",
+      "expected": "seller-key",
+      "outcome": "refused before payment",
+      "ok": true,
+      "evidence": "Seller key is the one you pinned · pinned SHA256:NyqDEQK6vjCwgXEP… on 2026-10-17 · this offer SHA256:1bciT7Tf41BIVAjM…"
+    },
+    {
+      "id": "4",
+      "name": "price swap (signed $0.75, 402 asks $0.50)",
+      "offerId": "offer_7c9e27eca00f",
+      "expected": "402 amount",
+      "outcome": "declined before payment",
+      "ok": true,
+      "evidence": "402 asks for $0.50, the signed price is $0.75; no payment token was requested"
+    },
+    {
+      "id": "5",
+      "name": "missing parent sandbox",
+      "offerId": "offer_7c9e27eca00f",
+      "expected": "parent-exists",
+      "outcome": "refused before payment",
+      "ok": true,
+      "evidence": "Parent sandbox exists · CreateOS returned HTTP 404 for sb-01m5500000000000000000000x"
+    },
+    {
+      "id": "6",
+      "name": "tampered tool (live offer)",
+      "offerId": "offer_0481f7367d6a",
+      "expected": "artifact-digest-local",
+      "outcome": "refunded after payment",
+      "ok": true,
+      "evidence": "Tool files hashed by the buyer match the signed digest · 4 files, 33929 bytes · signed 88cb90ae5b196649… · buyer e15714f63be17427…",
+      "paymentIntentId": "pi_3URgX4QwaSeLdSm41NHkyJwX",
+      "refundId": "re_3URgX4QwaSeLdSm41bxUtXlm"
+    }
+  ]
+}
