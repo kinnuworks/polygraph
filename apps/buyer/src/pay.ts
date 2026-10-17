@@ -146,7 +146,7 @@ async function payWithLink(url: string, expectedCents: number, offer: OfferManif
   const hasNext = isRecord(started._next);
   // link-cli's own poll step returns at once while the request is still pending, so wait here instead.
   const polled = await waitForApproval(spendRequestId);
-  if (polled.status !== "approved") throw new PaymentDeclined(`Link spend request ended as ${String(polled.status)}`);
+  if (polled.status !== "approved" && polled.status !== "succeeded") throw new PaymentDeclined(`Link spend request ended as ${String(polled.status)}`);
 
   // The approved request carries the shared payment token. Paying with it directly avoids link-cli's
   // re-probe, which rejects the fresh per-issuance nonce mppx servers put in every 402 challenge.
