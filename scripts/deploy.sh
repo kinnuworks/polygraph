@@ -15,5 +15,15 @@ for f in data/offers/*.json; do
   case "$f" in *.foil.json) ;; *) cp "$f" "$STAGE/data/offers/" ;; esac
 done
 
+ENV_ID="${CREATEOS_ENVIRONMENT_ID:-9354fe38-3fa1-466f-b6b8-f1866862e622}"
 (cd "$STAGE" && createos --api-key "$KEY" deploy --project "$PROJECT_ID" --dir .)
-echo "Promote the new deployment with: createos deployments promote --project $PROJECT_ID --environment <id> --deployment <id>"
+
+# Promote the newest deployment, then put every older one to sleep. Two running gateways
+# would each keep a warm pool and drain the sandbox quota.
+list() { createos --api-key "$KEY" -o json deployments list --project "$PROJECT_ID"; }
+NEW_ID="$(list | python3 -c 'import sys,json; d=json.load(sys.stdin); d=d if isinstance(d,list) else d.get("data",[]); print(d[0]["id"])')"
+createos --api-key "$KEY" deployments promote --project "$PROJECT_ID" --environment "$ENV_ID" --deployment "$NEW_ID"
+for old in $(list | python3 -c 'import sys,json; d=json.load(sys.stdin); d=d if isinstance(d,list) else d.get("data",[]); print(" ".join(x["id"] for x in d[1:] if x.get("status")=="deployed"))'); do
+  createos --api-key "$KEY" deployments sleep --force --project "$PROJECT_ID" --deployment "$old"
+done
+echo "Live deployment: $NEW_ID"
