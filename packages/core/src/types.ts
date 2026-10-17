@@ -83,6 +83,7 @@ export type PolygraphEvent =
   | { type: "buyer.refused"; ts: string; offerId: string; reason: string }
   | { type: "payment.created"; ts: string; paymentIntentId: string; amountUsd: string }
   | { type: "payment.refunded"; ts: string; paymentIntentId: string; reason: string }
-  | { type: "worker.forked"; ts: string; workerSandboxId: string; parentSandboxId: string; ms: number }
+  /** ms runs from the paid request reaching the gateway to the worker being ready; "warm" means it came from the pre-forked pool. */
+  | { type: "worker.forked"; ts: string; workerSandboxId: string; parentSandboxId: string; ms: number; mode: "warm" | "cold" }
   | { type: "worker.destroyed"; ts: string; workerSandboxId: string }
   | { type: "job.completed"; ts: string; receipt: Receipt };
