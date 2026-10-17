@@ -53,6 +53,7 @@
         <span class="badge badge--dot">Built on CreateOS Sandbox and Stripe machine payments</span>
         <h1>Don't trust the seller. Ask the <span class="hl">platform</span>.</h1>
         <p class="lead">Polygraph checks a seller's claims against CreateOS's own records before your agent pays. If one is false, the agent refuses and no payment is created.</p>
+        <p class="audience">For AI agents that need heavy software they can't install, like archival PDF conversion with LibreOffice, from sellers they've never met.</p>
         <div class="cta-row">
           <a class="btn btn-candy btn-lg" href="#console">Watch it live
             <svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-down"/></svg>
@@ -84,7 +85,7 @@
                 <li class="phase" data-phase="3"><span class="phase__mark" aria-hidden="true">4</span>Run</li>
               </ol>
               <div class="console__tools">
-                <span class="preview-tag" data-el="preview-tag" hidden>Preview data</span>
+                <span class="preview-tag" data-el="preview-tag" hidden>Replay of a recorded run</span>
                 <button class="tool-btn" type="button" data-el="replay" hidden>
                   <svg fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-replay"/></svg>
                   <span>Replay</span>
@@ -97,7 +98,7 @@
             </div>
 
             <div class="console__grid">
-              <section class="col col--seller" aria-labelledby="col-seller">
+              <section class="col col--seller" aria-labelledby="col-seller" data-el="seller-col">
                 <header class="col__head">
                   <span class="col__icon"><svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-box"/></svg></span>
                   <div><h2 class="col__title" id="col-seller">Seller agent</h2><p class="col__sub">Builds, tests and attacks the tool</p></div>
@@ -131,6 +132,10 @@
                   <div><h2 class="col__title" id="col-trust">Trust check</h2><p class="col__sub">Signed claims against CreateOS records</p></div>
                   <span class="pill" data-el="trust-pill">Idle</span>
                 </header>
+                <div class="col__fixed col__fixed--legend">
+                  <p class="legend">Each row is a claim the seller signed, checked against CreateOS's own records, not the seller's word. <span class="legend__green">Green means CreateOS agrees.</span></p>
+                  <ul class="tally" data-el="tally" aria-label="Outcome so far"></ul>
+                </div>
                 <div class="col__scroll" data-el="offers-scroll">
                   <div class="offers" data-el="offers"></div>
                 </div>
@@ -156,7 +161,7 @@
                   </div>
                 </div>
                 <div class="col__scroll" data-el="buyer-scroll">
-                  <ol class="feed" data-el="buyer-feed"></ol>
+                  <div class="runs" data-el="buyer-feed"></div>
                 </div>
               </section>
             </div>
@@ -200,6 +205,18 @@
             <p>The job runs in a fresh worker forked from the sandbox the buyer checked, and the buyer keeps a receipt.</p>
           </li>
         </ol>
+        <div class="proof reveal">
+          <div class="proof__item">
+            <p class="proof__label">Same archival test suite</p>
+            <p class="proof__row"><span class="proof__name">Plain LibreOffice</span><span class="proof__score proof__score--weak">14 of 17</span></p>
+            <p class="proof__row"><span class="proof__name">The seller agent's tool</span><span class="proof__score">17 of 17 <small>PDF/A-2b</small></span></p>
+          </div>
+          <div class="proof__item">
+            <p class="proof__label">Why a buyer should doubt</p>
+            <p class="proof__stat"><span class="t-mono">161</span> of <span class="t-mono">20,338</span> paid agent endpoints were traps.</p>
+            <p class="proof__source">dev.to/afx, 2026</p>
+          </div>
+        </div>
       </div>
     </section>
 

@@ -2,7 +2,7 @@ import { createConsole, renderReceipt } from "./console.js";
 
 // Event types the gateway names its SSE frames after.
 const EVENT_TYPES = [
-  "seller.step", "seller.test", "seller.patch", "seller.attack", "offer.published",
+  "seller.step", "seller.test", "seller.patch", "seller.attack", "offer.published", "offer.removed",
   "buyer.step", "buyer.check", "buyer.refused",
   "payment.created", "payment.refunded", "worker.forked", "worker.destroyed", "job.completed",
 ];
@@ -39,11 +39,20 @@ async function startDemo() {
   replay.hidden = false;
 
   let stop = () => {};
-  const play = () => {
+  let playId = 0;
+  const play = async () => {
+    const id = ++playId;
     stop();
     ui.reset();
     receiptSlot.innerHTML = receiptEmpty;
-    stop = runDemo((event) => ui.apply(event));
+    try {
+      const stopThis = await runDemo((event) => ui.apply(event));
+      // A second click while loading wins; cancel the older replay.
+      if (id === playId) stop = stopThis;
+      else stopThis();
+    } catch {
+      ui.setConnection("offline");
+    }
   };
   replay.addEventListener("click", play);
   play();
