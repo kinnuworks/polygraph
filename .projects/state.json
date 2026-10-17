@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "providers": {
+    "createos": {
+      "name": "createos"
+    }
+  },
+  "resources": {
+    "createos-plan": {
+      "livemode": true,
+      "name": "createos-plan",
+      "providerName": "createos",
+      "serviceId": "free"
+    }
+  }
+}

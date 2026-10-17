@@ -1,0 +1,31 @@
+{
+  "name": "polygraph",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "gateway": "tsx --env-file=.env apps/gateway/src/server.ts",
+    "seller": "tsx --env-file=.env apps/seller/src/cli.ts",
+    "buyer": "tsx --env-file=.env apps/buyer/src/cli.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
+    "@hono/node-server": "^2.1.5",
+    "@nodeops-createos/sandbox": "^0.8.2",
+    "hono": "^4.13.13",
+    "mppx": "^0.13.5",
+    "stripe": "^23.0.0"
+  }
+}
