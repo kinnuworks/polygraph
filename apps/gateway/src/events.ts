@@ -1,7 +1,10 @@
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import type { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { streamSSE } from "hono/streaming";
 import type { PolygraphEvent } from "@polygraph/core";
+import { config } from "./config.js";
 
 const CAPACITY = 500;
 const REPLAY = 200;
@@ -18,10 +21,42 @@ const buffer: StoredEvent[] = [];
 const listeners = new Set<Listener>();
 let nextId = 1;
 
-function append(event: PolygraphEvent): void {
+function store(event: PolygraphEvent): StoredEvent {
   const stored = { id: nextId++, event };
   buffer.push(stored);
   if (buffer.length > CAPACITY) buffer.shift();
+  return stored;
+}
+
+/** Live events (not the recorded replay), newest last, as kept in the history file. */
+const history: PolygraphEvent[] = [];
+/** Lines in the history file; it is rewritten from `history` once it holds twice CAPACITY. */
+let logLines = 0;
+
+function writeHistoryFile(): void {
+  mkdirSync(dirname(config.eventsLogPath), { recursive: true });
+  writeFileSync(config.eventsLogPath, history.map((event) => `${JSON.stringify(event)}\n`).join(""));
+  logLines = history.length;
+}
+
+function persist(event: PolygraphEvent): void {
+  history.push(event);
+  if (history.length > CAPACITY) history.shift();
+  try {
+    if (logLines >= 2 * CAPACITY) {
+      writeHistoryFile();
+    } else {
+      appendFileSync(config.eventsLogPath, `${JSON.stringify(event)}\n`);
+      logLines++;
+    }
+  } catch (err) {
+    console.error(`[events] could not write ${config.eventsLogPath}: ${(err as Error).message}`);
+  }
+}
+
+function append(event: PolygraphEvent): void {
+  const stored = store(event);
+  persist(event);
   for (const listener of listeners) listener(stored);
 }
 
@@ -40,6 +75,57 @@ function parseIncoming(body: unknown): PolygraphEvent | null {
   const ts = typeof candidate.ts === "string" && !Number.isNaN(Date.parse(candidate.ts)) ? candidate.ts : new Date().toISOString();
   return { ...candidate, ts } as PolygraphEvent;
 }
+
+/** Reads a JSON-lines file of events, skipping lines that are not events. Missing files read as empty. */
+function readEventLines(path: string): PolygraphEvent[] {
+  let text: string;
+  try {
+    text = readFileSync(path, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") console.error(`[events] could not read ${path}: ${(err as Error).message}`);
+    return [];
+  }
+  const events: PolygraphEvent[] = [];
+  let skipped = 0;
+  for (const line of text.split("\n")) {
+    if (!line.trim()) continue;
+    let event: PolygraphEvent | null = null;
+    try {
+      event = parseIncoming(JSON.parse(line));
+    } catch {
+      /* counted below */
+    }
+    if (event) events.push(event);
+    else skipped++;
+  }
+  if (skipped > 0) console.warn(`[events] skipped ${skipped} unreadable line(s) in ${path}`);
+  return events;
+}
+
+/**
+ * Fills the feed before the server starts: a recorded run baked into the deployment comes first, under a
+ * marker so viewers know it is a replay, then the live history kept from before a restart.
+ * History is compacted to the newest CAPACITY events, so the file stays small across restarts.
+ */
+function loadHistory(): void {
+  const recorded = readEventLines(config.recordedEventsPath);
+  if (recorded.length > 0) {
+    const first = recorded[0]!.ts;
+    store({ type: "seller.step", ts: first, step: "replay", detail: `recorded run from ${first}` });
+    for (const event of recorded) store(event);
+    console.log(`[events] replaying ${recorded.length} recorded event(s) from ${config.recordedEventsPath}`);
+  }
+  history.push(...readEventLines(config.eventsLogPath).slice(-CAPACITY));
+  for (const event of history) store(event);
+  if (history.length > 0) console.log(`[events] restored ${history.length} event(s) from ${config.eventsLogPath}`);
+  try {
+    writeHistoryFile();
+  } catch (err) {
+    console.error(`[events] could not write ${config.eventsLogPath}: ${(err as Error).message}`);
+  }
+}
+
+loadHistory();
 
 function replayFrom(lastEventId: string | undefined): StoredEvent[] {
   const lastId = lastEventId === undefined ? NaN : Number(lastEventId);

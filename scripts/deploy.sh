@@ -10,7 +10,8 @@ trap 'rm -rf "$STAGE"' EXIT
 
 cp -R package.json package-lock.json tsconfig.json Dockerfile .dockerignore packages apps "$STAGE"/
 rm -rf "$STAGE/apps/gateway/.runtime"
-mkdir -p "$STAGE/data/offers"
+mkdir -p "$STAGE/data/offers" "$STAGE/data/events"
+[ -f data/events/recorded.jsonl ] && cp data/events/recorded.jsonl "$STAGE/data/events/"
 for f in data/offers/*.json; do
   case "$f" in *.foil.json) ;; *) cp "$f" "$STAGE/data/offers/" ;; esac
 done

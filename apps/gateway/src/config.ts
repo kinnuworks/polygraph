@@ -83,6 +83,10 @@ export const config = {
   forkBackoffMs: 2 * 60_000,
   /** Workers the gateway created and has not destroyed, kept on disk so a crash leaves nothing behind after the next start. */
   ledgerPath: resolve(runtimeDir, "workers.json"),
+  /** Events from a recorded run, baked into the deployment and replayed at the start of the feed. */
+  recordedEventsPath: resolve(repoRoot, "data/events/recorded.jsonl"),
+  /** Live feed history, so a restart without a redeploy keeps it. */
+  eventsLogPath: resolve(runtimeDir, "events.jsonl"),
   /** Purchases, so refund and done keep working across a restart. */
   purchasesPath: resolve(runtimeDir, "purchases.json"),
   /** A worker that is never marked done is destroyed after this long. */
