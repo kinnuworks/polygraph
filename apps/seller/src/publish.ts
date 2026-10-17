@@ -61,7 +61,36 @@ export async function publishOffer(manifest: OfferManifest, foil?: FoilKind): Pr
   }
   await writeFile(join(OFFERS_DIR, `${manifest.offerId}.json`), `${JSON.stringify(signed, null, 2)}\n`);
   await emit({ type: "offer.published", offer: signed });
+  await gatewayRequest("POST", "/offers", { offer: signed, ...(foil ? { foil } : {}) }, [201]);
   return signed;
+}
+
+const PUBLISH_TOKEN_HEADER = "x-polygraph-publish-token";
+
+/**
+ * Mirrors a publish or withdrawal to the gateway's publish API. Local files stay the source of truth,
+ * so a missing token or a failed call is logged and the run continues.
+ */
+async function gatewayRequest(method: "POST" | "DELETE", path: string, body: unknown, okStatuses: number[]): Promise<void> {
+  const gateway = process.env.POLYGRAPH_GATEWAY_URL;
+  const token = process.env.PUBLISH_TOKEN;
+  if (!gateway || !token) {
+    console.log(`  gateway: skipped ${method} ${path} (POLYGRAPH_GATEWAY_URL or PUBLISH_TOKEN not set)`);
+    return;
+  }
+  try {
+    const res = await fetch(`${gateway}${path}`, {
+      method,
+      headers: { [PUBLISH_TOKEN_HEADER]: token, ...(body === undefined ? {} : { "content-type": "application/json" }) },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(15_000),
+    });
+    const text = (await res.text()).slice(0, 300);
+    const outcome = okStatuses.includes(res.status) ? "ok" : "unexpected";
+    console.log(`  gateway: ${method} ${path} -> ${res.status} ${outcome} ${text}`);
+  } catch (err) {
+    console.log(`  gateway: ${method} ${path} failed: ${(err as Error).message}`);
+  }
 }
 
 export interface StoredOffer {
@@ -100,7 +129,10 @@ export async function findOfferForParent(parentSandboxId: string): Promise<Signe
   return (await listStoredOffers()).find((offer) => !offer.foil && offer.signed.manifest.parentSandboxId === parentSandboxId)?.signed;
 }
 
+/** Withdraws an offer locally and from the gateway. A 404 there means the gateway never had it. */
 export async function removeOffer(offerId: string): Promise<void> {
+  // Gateway first: a gateway that reads this same directory can only withdraw an offer it can still find.
+  await gatewayRequest("DELETE", `/offers/${encodeURIComponent(offerId)}`, undefined, [200, 404]);
   await rm(join(OFFERS_DIR, `${offerId}.json`), { force: true });
   await rm(join(OFFERS_DIR, `${offerId}.foil.json`), { force: true });
 }
