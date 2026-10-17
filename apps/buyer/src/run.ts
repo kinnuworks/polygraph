@@ -1,43 +1,55 @@
 import { access } from "node:fs/promises";
-import { basename } from "node:path";
+import { basename, resolve } from "node:path";
 import { emit, type PurchaseGrant, type SignedManifest } from "@polygraph/core";
 import { discover } from "./discover.js";
 import { postJson } from "./http.js";
-import { runJob } from "./job.js";
-import { buyOffer, PaymentDeclined, type PayMode, type Payment } from "./pay.js";
+import { runJob, type JobResult } from "./job.js";
+import { runOwned } from "./own.js";
+import { buyOffer, PaidRequestFailed, PaymentDeclined, type PayMode, type Payment } from "./pay.js";
 import { buildReceipt, saveReceipt } from "./receipt.js";
-import { printCheck, printRefusal, printSummary, type OfferRow, type Outcome } from "./summary.js";
-import { verifyOffer, verifyWorker, type Verdict } from "./verify.js";
+import { SellerPins } from "./pins.js";
+import { printSummary, type OfferRow, type Outcome } from "./summary.js";
+import { RemoteSandbox } from "./worker.js";
+import { verifyOffer, verifyWorker, type Verdict, type WorkerVerdict } from "./verify.js";
+
+/** worker: run in the seller's verified worker. own: run in a sandbox on the buyer's own account. */
+export type RunMode = "worker" | "own";
 
 export interface RunOptions {
   gateway: string;
   file: string;
   pay: PayMode;
+  mode: RunMode;
   outDir: string;
+  /** Pin the seller key seen now if none is pinned for this gateway yet. */
+  trustSeller: boolean;
 }
+
+/** Seller keys pinned with --trust-seller, one per gateway origin. */
+const PINS_FILE = resolve("data/buyer/trusted-sellers.json");
 
 const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 /** Turns an unexpected error during verification into a failed verdict, so it can never lead to a payment or an upload. */
-async function safely(offerId: string, verify: () => Promise<Verdict>): Promise<Verdict> {
+async function safely(offerId: string, verify: () => Promise<WorkerVerdict>): Promise<WorkerVerdict> {
   try {
     return await verify();
   } catch (err) {
     const check = { id: "verification-error", label: "Verification could not finish", status: "fail" as const, detail: errorText(err) };
     await emit({ type: "buyer.check", offerId, check });
-    printCheck(check);
     return { passed: false, checks: [check], reason: `${check.label}: ${check.detail}` };
   }
 }
 
 async function refuse(offerId: string, reason: string): Promise<void> {
   await emit({ type: "buyer.refused", offerId, reason });
-  printRefusal(offerId, reason);
 }
 
 async function tellGateway(gateway: string, grant: PurchaseGrant, action: "refund" | "done", reason?: string): Promise<void> {
+  // The secret proves the call comes from the buyer; older gateways do not issue one.
+  const headers: Record<string, string> = grant.purchaseSecret ? { "x-purchase-secret": grant.purchaseSecret } : {};
   try {
-    await postJson(`${gateway}/purchases/${encodeURIComponent(grant.purchaseId)}/${action}`, reason ? { reason } : {});
+    await postJson(`${gateway}/purchases/${encodeURIComponent(grant.purchaseId)}/${action}`, reason ? { reason } : {}, headers);
     await emit({ type: "buyer.step", step: action === "refund" ? "refund-requested" : "released", detail: `${grant.purchaseId}${reason ? ` · ${reason}` : ""}` });
   } catch (err) {
     await emit({ type: "buyer.step", step: `${action}-failed`, detail: `${grant.purchaseId} · ${errorText(err)}` });
@@ -52,7 +64,8 @@ async function tellGateway(gateway: string, grant: PurchaseGrant, action: "refun
 export async function run(options: RunOptions): Promise<boolean> {
   const { gateway } = options;
   await access(options.file);
-  await emit({ type: "buyer.step", step: "start", detail: `${basename(options.file)} · gateway ${gateway} · pay ${options.pay}` });
+  await emit({ type: "buyer.step", step: "start", detail: `${basename(options.file)} · gateway ${gateway} · pay ${options.pay} · mode ${options.mode}` });
+  const pins = await SellerPins.load(PINS_FILE, options.trustSeller);
 
   const { offers } = await discover(gateway);
   const rows: OfferRow[] = [];
@@ -64,7 +77,7 @@ export async function run(options: RunOptions): Promise<boolean> {
   const candidates: { offer: SignedManifest; before: Verdict }[] = [];
   for (const offer of offers) {
     const { offerId } = offer.manifest;
-    const before = await safely(offerId, () => verifyOffer(gateway, offer));
+    const before = await safely(offerId, () => verifyOffer(gateway, offer, pins));
     if (before.passed) {
       candidates.push({ offer, before });
       continue;
@@ -88,10 +101,12 @@ export async function run(options: RunOptions): Promise<boolean> {
       if (err instanceof PaymentDeclined) {
         await refuse(offerId, err.message);
         row(offer, "payment declined", err.message);
-      } else {
-        await emit({ type: "buyer.step", step: "payment-failed", detail: `${offerId} · ${errorText(err)}` });
-        row(offer, "failed", errorText(err));
+        continue;
       }
+      await emit({ type: "buyer.step", step: "payment-failed", detail: `${offerId} · ${errorText(err)}` });
+      row(offer, "failed", errorText(err));
+      // After a paid request fails, paying the next seller could charge twice; stop and let the refund settle.
+      if (err instanceof PaidRequestFailed) break;
       continue;
     }
     const { grant } = payment;
@@ -106,15 +121,27 @@ export async function run(options: RunOptions): Promise<boolean> {
     }
 
     try {
-      const result = await runJob(grant, options.file, options.outDir);
-      const verification = [...before.checks, ...after.checks, ...result.checks];
-      const receipt = buildReceipt(offer, grant, result, verification);
+      let result: JobResult;
+      let verification = [...before.checks, ...after.checks];
+      let executionSandboxId: string | undefined;
+      if (options.mode === "own") {
+        if (!after.bundle) throw new Error("the verified tool bundle is missing");
+        const owned = await runOwned(offer, after.bundle, options.file, options.outDir);
+        result = owned.job;
+        executionSandboxId = owned.sandboxId;
+        verification = [...verification, ...owned.checks];
+      } else {
+        result = await runJob(new RemoteSandbox(grant.workerSandboxId, grant.workerToken), offerId, options.file, options.outDir);
+        verification = [...verification, ...result.checks];
+      }
+      const receipt = buildReceipt(offer, grant, result, verification, executionSandboxId);
       const receiptPath = await saveReceipt(receipt, result.outputPath);
       await tellGateway(gateway, grant, "done");
       row(offer, "completed", `${verification.length} checks passed`);
       job.push(
         ["purchase", grant.purchaseId],
         ["payment", `${grant.paymentIntentId} · $${payment.amountUsd}`],
+        ["mode", executionSandboxId ? `buyer-owned · ran in ${executionSandboxId} (destroyed), seller worker got nothing` : "seller worker"],
         ["parent sandbox", offer.manifest.parentSandboxId],
         ["worker sandbox", grant.workerSandboxId],
         ["artifact digest", offer.manifest.artifactDigest],

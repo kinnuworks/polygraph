@@ -1,5 +1,3 @@
-import type { CheckResult } from "@polygraph/core";
-
 export type Outcome = "refused before payment" | "payment declined" | "refunded" | "failed" | "completed" | "not needed";
 
 export interface OfferRow {
@@ -25,15 +23,6 @@ function table(headers: string[], rows: string[][], maxCell: number): string {
   const rule = widths.map((w) => "─".repeat(w)).join("  ");
   const [head, ...body] = cells;
   return [line(head ?? []), rule, ...body.map(line)].join("\n");
-}
-
-/** One readable terminal line per check, since the event mirror only shows the event type. */
-export function printCheck(check: CheckResult): void {
-  console.log(`  ${check.status === "pass" ? "PASS" : "FAIL"}  ${check.label} · ${check.detail ?? ""}`);
-}
-
-export function printRefusal(offerId: string, reason: string): void {
-  console.log(`  REFUSED ${offerId} · ${reason}`);
 }
 
 export function printSummary(summary: RunSummary): void {

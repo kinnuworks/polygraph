@@ -1,8 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
-import { converterArgv, emit, sha256, TOOL_DIR, type CheckResult, type PurchaseGrant } from "@polygraph/core";
-import { printCheck } from "./summary.js";
-import { ScopedSandbox, shellQuote } from "./worker.js";
+import { converterArgv, emit, sha256, TOOL_DIR, type CheckResult } from "@polygraph/core";
+import { shellQuote, type RemoteSandbox } from "./worker.js";
 
 export interface JobResult {
   outputPath: string;
@@ -22,20 +21,20 @@ const safeName = (name: string) => name.replace(/[^A-Za-z0-9._-]/g, "_") || "inp
 /** Counts page objects; LibreOffice writes one `/Type /Page` dictionary per page. */
 const countPages = (pdf: Buffer) => (pdf.toString("latin1").match(/\/Type\s*\/Page(?![a-zA-Z])/g) ?? []).length;
 
-async function remoteSha256(worker: ScopedSandbox, path: string): Promise<string> {
+async function remoteSha256(worker: RemoteSandbox, path: string): Promise<string> {
   const run = await worker.sh(`sha256sum ${shellQuote(path)}`);
   return run.stdout.trim().split(/\s+/)[0] ?? "";
 }
 
 /** Uses pdfinfo inside the worker when the image has it, else counts page objects locally. */
-async function pageCount(worker: ScopedSandbox, remotePdf: string, pdf: Buffer): Promise<{ pages: number; source: string }> {
+async function pageCount(worker: RemoteSandbox, remotePdf: string, pdf: Buffer): Promise<{ pages: number; source: string }> {
   const run = await worker.sh(`command -v pdfinfo >/dev/null && pdfinfo ${shellQuote(remotePdf)} | awk '/^Pages:/ {print $2}'`);
   const pages = Number.parseInt(run.stdout.trim(), 10);
   return Number.isFinite(pages) && pages > 0 ? { pages, source: "pdfinfo" } : { pages: countPages(pdf), source: "page objects" };
 }
 
 /** Returns the remote PDF path, or "" when the tool left none. */
-async function findPdf(worker: ScopedSandbox, stdout: string, searchDirs: string[]): Promise<string> {
+async function findPdf(worker: RemoteSandbox, stdout: string, searchDirs: string[]): Promise<string> {
   // The converter prints the PDF path as its last line; fall back to searching in case it does not.
   const printed = stdout.split("\n").map((l) => l.trim()).filter((l) => l.startsWith("/") && l.endsWith(".pdf"));
   const fromStdout = printed.map((path) => `[ -f ${shellQuote(path)} ] && echo ${shellQuote(path)} && exit 0;`).join(" ");
@@ -44,17 +43,15 @@ async function findPdf(worker: ScopedSandbox, stdout: string, searchDirs: string
 }
 
 /**
- * Runs the buyer's document through the tool inside its verified worker: upload with the scoped
- * token, convert, download, then check the PDF on the buyer's side.
+ * Runs the buyer's document through the tool in a verified sandbox (the seller's worker or the
+ * buyer's own): upload, convert, download, then check the PDF on the buyer's side.
  */
-export async function runJob(grant: PurchaseGrant, inputPath: string, outDir: string): Promise<JobResult> {
-  const worker = new ScopedSandbox(grant.workerSandboxId, grant.workerToken);
+export async function runJob(worker: RemoteSandbox, offerId: string, inputPath: string, outDir: string): Promise<JobResult> {
   const checks: CheckResult[] = [];
   const check = async (id: string, label: string, passed: boolean, detail: string) => {
     const result: CheckResult = { id, label, status: passed ? "pass" : "fail", detail };
     checks.push(result);
-    await emit({ type: "buyer.check", offerId: grant.offerId, check: result });
-    printCheck(result);
+    await emit({ type: "buyer.check", offerId, check: result });
     if (!passed) throw new Error(`${label}: ${detail}`);
   };
 
@@ -65,7 +62,7 @@ export async function runJob(grant: PurchaseGrant, inputPath: string, outDir: st
   const remoteIn = `${JOB_DIR}/in/${name}`;
   const remoteOutDir = `${JOB_DIR}/out`;
 
-  await emit({ type: "buyer.step", step: "upload", detail: `${name} (${input.length} bytes) to ${grant.workerSandboxId}` });
+  await emit({ type: "buyer.step", step: "upload", detail: `${name} (${input.length} bytes) to ${worker.sandboxId}` });
   await worker.sh(`rm -rf ${JOB_DIR} && mkdir -p ${JOB_DIR}/in ${remoteOutDir}`);
   await worker.upload(remoteIn, input);
   const uploaded = await remoteSha256(worker, remoteIn);

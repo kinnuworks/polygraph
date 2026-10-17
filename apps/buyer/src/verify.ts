@@ -9,14 +9,21 @@ import {
   type SignedManifest,
 } from "@polygraph/core";
 import { getJson, isRecord } from "./http.js";
-import { printCheck } from "./summary.js";
-import { ScopedSandbox } from "./worker.js";
+import { bundleBytes, bundleDigest, downloadBundle, type Bundle } from "./bundle.js";
+import { verifyPythonHooks, verifySystemPackages } from "./integrity.js";
+import { keyFingerprint, shortFingerprint, type SellerPins } from "./pins.js";
+import { RemoteSandbox } from "./worker.js";
 
 export interface Verdict {
   passed: boolean;
   checks: CheckResult[];
   /** One line of evidence per failed check, for the refusal event. */
   reason?: string;
+}
+
+export interface WorkerVerdict extends Verdict {
+  /** The tool exactly as downloaded and hashed by the buyer, when that step was reached. */
+  bundle?: Bundle;
 }
 
 /** Collects checks for one offer and streams each one to the dashboard as it is decided. */
@@ -29,7 +36,6 @@ class Checklist {
     const check: CheckResult = { id, label, status: passed ? "pass" : "fail", detail };
     this.checks.push(check);
     await emit({ type: "buyer.check", offerId: this.offerId, check });
-    printCheck(check);
     return passed;
   }
 
@@ -57,7 +63,7 @@ async function inspectToken(gateway: string, offerId: string): Promise<string> {
 }
 
 /** Recomputes the tool digest inside the worker with the same command the seller ran before signing. */
-export async function toolDigest(worker: ScopedSandbox): Promise<string> {
+export async function toolDigest(worker: RemoteSandbox): Promise<string> {
   const run = await worker.sh(ARTIFACT_DIGEST_COMMAND);
   const digest = /^([0-9a-f]{64})\b/.exec(run.stdout.trim())?.[1];
   if (run.exitCode !== 0 || !digest) {
@@ -71,15 +77,27 @@ export async function toolDigest(worker: ScopedSandbox): Promise<string> {
  * itself reports it. The parent id comes from the signed manifest, so the gateway cannot point
  * the buyer at a different sandbox without breaking the signature.
  */
-export async function verifyOffer(gateway: string, offer: SignedManifest): Promise<Verdict> {
+export async function verifyOffer(gateway: string, offer: SignedManifest, pins: SellerPins): Promise<Verdict> {
   const { manifest } = offer;
   const list = new Checklist(manifest.offerId);
   await emit({ type: "buyer.step", step: "verify-offer", detail: `${manifest.offerId} · ${manifest.name} · $${manifest.priceUsd}` });
 
   const signature = verifyManifest(offer);
-  const keyId = typeof offer.publicKey.x === "string" ? `ed25519 key ${offer.publicKey.x.slice(0, 12)}…` : "embedded key";
-  if (!(await list.record("signature", "Seller signature covers this manifest", signature.valid, signature.valid ? keyId : (signature.reason ?? "invalid")))) {
+  const fingerprint = keyFingerprint(offer.publicKey);
+  const signedBy = `key ${shortFingerprint(fingerprint)}`;
+  if (!(await list.record("signature", "Seller signature covers this manifest", signature.valid, signature.valid ? signedBy : (signature.reason ?? "invalid")))) {
     return list.verdict();
+  }
+
+  const pin = await pins.check(gateway, manifest.offerId, fingerprint);
+  if (pin.status === "unpinned") {
+    await list.record("seller-key", "Seller key fingerprint (not pinned)", true, `${fingerprint} · pin it with --trust-seller`);
+  } else if (pin.status === "pinned-now") {
+    await list.record("seller-key", "Seller key pinned on first use", true, fingerprint);
+  } else {
+    const pinned = `pinned ${shortFingerprint(pin.pin.fingerprint)} on ${pin.pin.pinnedAt.slice(0, 10)}`;
+    const detail = pin.status === "match" ? `${fingerprint} · ${pinned}` : `${pinned} · this offer ${shortFingerprint(fingerprint)}`;
+    if (!(await list.record("seller-key", "Seller key is the one you pinned", pin.status === "match", detail))) return list.verdict();
   }
 
   let token: string;
@@ -115,9 +133,10 @@ export async function verifyOffer(gateway: string, offer: SignedManifest): Promi
 
 /**
  * Checks the paid worker before the buyer's document goes anywhere near it: lineage, firewall and
- * status from CreateOS, then the tool digest recomputed inside the worker itself.
+ * status from CreateOS, the tool hashed by the buyer from downloaded bytes and again inside the
+ * worker, then the system packages and Python startup hooks around the tool.
  */
-export async function verifyWorker(offer: SignedManifest, grant: PurchaseGrant, receiptReference: string | null): Promise<Verdict> {
+export async function verifyWorker(offer: SignedManifest, grant: PurchaseGrant, receiptReference: string | null): Promise<WorkerVerdict> {
   const { manifest } = offer;
   const list = new Checklist(manifest.offerId);
   await emit({ type: "buyer.step", step: "verify-worker", detail: `${grant.workerSandboxId} · purchase ${grant.purchaseId}` });
@@ -155,16 +174,36 @@ export async function verifyWorker(offer: SignedManifest, grant: PurchaseGrant, 
     return list.verdict();
   }
 
+  const worker = new RemoteSandbox(grant.workerSandboxId, grant.workerToken);
+  let bundle: Bundle | undefined;
   try {
-    const digest = await toolDigest(new ScopedSandbox(grant.workerSandboxId, grant.workerToken));
+    bundle = await downloadBundle(worker);
+    const digest = bundleDigest(bundle);
     await list.record(
-      "artifact-digest",
-      "Tool in the worker matches the signed digest",
+      "artifact-digest-local",
+      "Tool files hashed by the buyer match the signed digest",
       digest === manifest.artifactDigest,
-      `signed ${shortHash(manifest.artifactDigest)} · worker ${shortHash(digest)}`,
+      `${bundle.size} files, ${bundleBytes(bundle)} bytes · signed ${shortHash(manifest.artifactDigest)} · buyer ${shortHash(digest)}`,
     );
   } catch (err) {
-    await list.record("artifact-digest", "Tool in the worker matches the signed digest", false, errorText(err));
+    await list.record("artifact-digest-local", "Tool files hashed by the buyer match the signed digest", false, errorText(err));
   }
-  return list.verdict();
+
+  const probes: [string, string, () => Promise<{ passed: boolean; detail: string }>][] = [
+    ["artifact-digest", "Tool digest computed in the worker matches", async () => {
+      const digest = await toolDigest(worker);
+      return { passed: digest === manifest.artifactDigest, detail: `signed ${shortHash(manifest.artifactDigest)} · worker ${shortHash(digest)}` };
+    }],
+    ["system-packages", "LibreOffice packages are unmodified", () => verifySystemPackages(worker)],
+    ["python-hooks", "No added Python startup hooks", () => verifyPythonHooks(worker)],
+  ];
+  for (const [id, label, probe] of probes) {
+    try {
+      const finding = await probe();
+      await list.record(id, label, finding.passed, finding.detail);
+    } catch (err) {
+      await list.record(id, label, false, errorText(err));
+    }
+  }
+  return { ...list.verdict(), bundle };
 }

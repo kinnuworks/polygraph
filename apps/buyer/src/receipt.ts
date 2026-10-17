@@ -2,7 +2,13 @@ import { writeFile } from "node:fs/promises";
 import { emit, type CheckResult, type PurchaseGrant, type Receipt, type SignedManifest } from "@polygraph/core";
 import type { JobResult } from "./job.js";
 
-export function buildReceipt(offer: SignedManifest, grant: PurchaseGrant, job: JobResult, verification: CheckResult[]): Receipt {
+export function buildReceipt(
+  offer: SignedManifest,
+  grant: PurchaseGrant,
+  job: JobResult,
+  verification: CheckResult[],
+  executionSandboxId?: string,
+): Receipt {
   return {
     purchaseId: grant.purchaseId,
     offerId: offer.manifest.offerId,
@@ -14,6 +20,8 @@ export function buildReceipt(offer: SignedManifest, grant: PurchaseGrant, job: J
     inputSha256: job.inputSha256,
     outputSha256: job.outputSha256,
     completedAt: new Date().toISOString(),
+    mode: executionSandboxId ? "buyer-owned" : "seller-worker",
+    ...(executionSandboxId ? { executionSandboxId } : {}),
   };
 }
 

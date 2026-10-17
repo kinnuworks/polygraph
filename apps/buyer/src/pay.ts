@@ -3,7 +3,7 @@ import { promisify } from "node:util";
 import { Receipt as PaymentReceipt } from "mppx";
 import { Mppx, stripe } from "mppx/client";
 import { emit, type OfferManifest, type PurchaseGrant } from "@polygraph/core";
-import { isRecord } from "./http.js";
+import { excerpt, isRecord } from "./http.js";
 import { centsToUsd, usdToCents } from "./money.js";
 
 export type PayMode = "test" | "link";
@@ -17,6 +17,9 @@ export interface Payment {
 
 /** The buyer declined to pay, for example because the 402 asked for more than the signed price. */
 export class PaymentDeclined extends Error {}
+
+/** The credential was sent but no grant came back, so money may have moved without a worker. */
+export class PaidRequestFailed extends Error {}
 
 /** What the paid request answered, independent of which payment path produced it. */
 interface PaidResponse {
@@ -169,16 +172,19 @@ export async function buyOffer(gateway: string, offer: OfferManifest, mode: PayM
   await emit({ type: "buyer.step", step: "pay", detail: `$${amountUsd} for ${offer.offerId} via ${via}` });
 
   const paid = mode === "test" ? await payWithTestCard(url, expectedCents) : await payWithLink(url, expectedCents, offer);
-  if (paid.status !== 200) throw new Error(`gateway answered HTTP ${paid.status} to the paid request: ${paid.body.slice(0, 300)}`);
+  if (paid.status !== 200) {
+    const refunded = /"refunded"\s*:\s*true/.test(paid.body) ? " (gateway reports a refund)" : "";
+    throw new PaidRequestFailed(`gateway answered HTTP ${paid.status} after payment${refunded}: ${excerpt(paid.body)}`);
+  }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(paid.body);
   } catch {
-    throw new Error(`paid response is not JSON: ${paid.body.slice(0, 200)}`);
+    throw new PaidRequestFailed(`paid response is not JSON: ${excerpt(paid.body)}`);
   }
   const grant = isRecord(parsed) && isPurchaseGrant(parsed.grant) ? parsed.grant : parsed;
-  if (!isPurchaseGrant(grant)) throw new Error(`paid response is not a purchase grant: ${paid.body.slice(0, 200)}`);
+  if (!isPurchaseGrant(grant)) throw new PaidRequestFailed(`paid response is not a purchase grant: ${excerpt(paid.body)}`);
 
   await emit({ type: "buyer.step", step: "paid", detail: `${grant.paymentIntentId} · worker ${grant.workerSandboxId}` });
   return { grant, receiptReference: receiptReference(paid.receiptHeader), amountUsd };
