@@ -12,19 +12,19 @@ const CASES = [
     test: "test_oversized_input_rejected",
     label: "oversized input rejected",
     requirement:
-      "convert.py enforces an input size cap. The test writes a 30 MB file of random bytes named big.docx into tmp_path and expects a non-zero exit with a clear one-line error on stderr and no traceback.",
+      "The test writes a 30 MB file of random bytes named big.docx into tmp_path and expects exit 3 with a clear one-line error on stderr and no traceback.",
   },
   {
     test: "test_corrupt_input_reports_error",
     label: "corrupt input reports a clear error",
     requirement:
-      "A corrupt input (a few random bytes, or a truncated copy of a valid fixture, named .docx) makes convert.py exit non-zero with a clear message on stderr instead of a Python traceback.",
+      "A corrupt input (a few random bytes, or a truncated copy of a valid fixture, named .docx) makes convert.py exit 2 with a clear message on stderr instead of a Python traceback.",
   },
   {
     test: "test_conversion_timeout_enforced",
     label: "conversion bounded by a timeout",
     requirement:
-      "convert.py passes a timeout to the soffice subprocess and reports a clear error when it expires. The test shows a stalled conversion is stopped within the limit (for example with a configurable timeout and a stand-in soffice that only sleeps).",
+      "convert.py passes a timeout to the soffice subprocess and exits 4 with a clear error when it expires. The test shows a stalled conversion is stopped within the limit (for example with a configurable timeout and a stand-in soffice that only sleeps).",
   },
   {
     test: "test_output_stays_in_output_dir",
@@ -34,7 +34,7 @@ const CASES = [
   },
 ] as const;
 
-const HARDEN_BRIEF = `Task: ${SPEC}
+export const HARDEN_BRIEF = `Task: ${SPEC}
 
 ${INTERFACE_CONTRACT}
 

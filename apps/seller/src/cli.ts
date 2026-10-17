@@ -1,6 +1,7 @@
 import { parseArgs } from "node:util";
 import type { Sandbox } from "@nodeops-createos/sandbox";
 import { emit, type OfferManifest } from "@polygraph/core";
+import { acceptanceLoop } from "./acceptance.js";
 import { buildTool, provision } from "./build.js";
 import { createFoils } from "./foils.js";
 import { harden } from "./harden.js";
@@ -52,7 +53,7 @@ process.once("SIGINT", () => {
   void shutdown(true).finally(() => process.exit(130));
 });
 
-/** Steps 1 to 6: provision, write, test and fix, harden, package, publish. */
+/** Steps 1 to 6: provision, write, test and fix, harden, acceptance, package, publish. */
 async function buildAndPublish(repo: string): Promise<{ parent: Sandbox; manifest: OfferManifest }> {
   await emit({ type: "seller.step", step: "provision", detail: `creating ${SHAPE} ${ROOTFS} sandbox (model ${modelName})` });
   const parent = await registry.create("parent", { shape: SHAPE, rootfs: ROOTFS });
@@ -61,6 +62,7 @@ async function buildAndPublish(repo: string): Promise<{ parent: Sandbox; manifes
   await provision(parent, repo);
   const build = await buildTool(parent, repo);
   const hardened = await harden(parent, build.workspace, build.facts);
+  const acceptance = await acceptanceLoop(parent, build.workspace, build.facts);
 
   const { digest, files } = await computeDigest(parent);
   await emit({ type: "seller.step", step: "package", detail: `artifactDigest ${digest} over ${files.length} files: ${files.join(" ")}` });
@@ -79,7 +81,7 @@ async function buildAndPublish(repo: string): Promise<{ parent: Sandbox; manifes
     egress: hardened.egress,
     artifactDigest: digest,
     priceUsd: PRICE_USD,
-    checks: hardened.checks,
+    checks: [...hardened.checks, acceptance],
     createdAt: new Date().toISOString(),
   };
   await publishOffer(manifest);

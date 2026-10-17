@@ -14,10 +14,14 @@ export const ENGINEER_SYSTEM = [
   "You return complete files. When something fails you read the real output, find the cause and fix it; you never hide a failure.",
 ].join(" ");
 
-export const INTERFACE_CONTRACT = `Interface contract (other programs depend on it):
-- Entry point: \`python3 ${TOOL_DIR}/convert.py <input_path> <output_dir>\`, callable from any working directory.
-- On success: write the PDF into <output_dir>, print its absolute path as the last line of stdout, exit 0.
-- On failure: print a one-line reason to stderr and exit non-zero.
+export const INTERFACE_CONTRACT = `Interface contract (other programs depend on it, and an independent acceptance suite you cannot see checks it):
+- Command: \`python3 ${TOOL_DIR}/convert.py <input> <outdir>\`.
+- Supported input extensions: .docx .odt .rtf .pptx .xlsx.
+- Writes <outdir>/<input stem>.pdf and prints that absolute path as the last line of stdout.
+- Exit codes: 0 on success; 2 for an unsupported extension or an unreadable or corrupt input; 3 for an input over 25 MB; 4 on timeout (60 s).
+- Must work when two conversions run at the same time.
+- File names may contain spaces and non-ASCII characters.
+- The PDF must contain the input's text.
 - Python standard library only; nothing may be installed with pip.
 - At run time the program has no outbound network access.`;
 
@@ -93,18 +97,21 @@ export async function runTests(sandbox: Sandbox): Promise<TestRun> {
   return { passed, failed, exitCode: result.exitCode, output, ok: result.exitCode === 0 && failed === 0 && passed > 0 };
 }
 
-export async function emitTestRun(run: TestRun): Promise<void> {
-  console.log(`  ${run.passed} passed, ${run.failed} failed (exit ${run.exitCode})`);
-  await emit({ type: "seller.test", passed: run.passed, failed: run.failed, output: tail(run.output, 4000) });
+export async function emitTestRun(suite: string, run: TestRun): Promise<void> {
+  console.log(`  ${suite}: ${run.passed} passed, ${run.failed} failed (exit ${run.exitCode})`);
+  await emit({ type: "seller.test", passed: run.passed, failed: run.failed, output: `${suite}: ${tail(run.output, 4000)}` });
 }
+
+// Writer, Calc and Impress cover every supported input format; poppler-utils gives pdftotext for checking output.
+const PACKAGES = ["libreoffice-writer-nogui", "libreoffice-calc-nogui", "libreoffice-impress-nogui", "python3-uno", "poppler-utils"];
 
 /** Installs LibreOffice and clones the upstream project for reference and its licence. */
 export async function provision(sandbox: Sandbox, repo: string): Promise<void> {
-  await emit({ type: "seller.step", step: "provision", detail: "installing libreoffice-writer-nogui and python3-uno" });
+  await emit({ type: "seller.step", step: "provision", detail: `installing ${PACKAGES.join(" ")}` });
   const apt = await mustSh(
     sandbox,
     "apt-get install",
-    "export DEBIAN_FRONTEND=noninteractive && apt-get update -qq && apt-get install -y -qq --no-install-recommends libreoffice-writer-nogui python3-uno >/dev/null",
+    `export DEBIAN_FRONTEND=noninteractive && apt-get update -qq && apt-get install -y -qq --no-install-recommends ${PACKAGES.join(" ")} >/dev/null`,
     600_000,
   );
   await emit({ type: "seller.step", step: "provision", detail: `LibreOffice installed in ${(apt.ms / 1000).toFixed(0)} s` });
@@ -124,6 +131,7 @@ async function environmentFacts(sandbox: Sandbox): Promise<string> {
       `echo "pytest: $(python3 -m pytest --version 2>&1 | head -1)"`,
       `echo "soffice: $(command -v soffice) -> $(readlink -f "$(command -v soffice)")"`,
       `echo "libreoffice-writer-nogui: $(dpkg-query -W -f='\${Version}' libreoffice-writer-nogui)"`,
+      `echo "pdftotext: $(command -v pdftotext)"`,
       `echo "user: $(id -un), cpus: $(nproc), memory: $(free -m | awk '/Mem:/ {print $2}') MiB"`,
     ].join("\n"),
   );
@@ -191,7 +199,7 @@ export async function testAndFix(options: {
   for (let attempt = 1; ; attempt++) {
     await emit({ type: "seller.step", step: phase, detail: `run ${attempt}/${maxRuns}: python3 -m pytest -q` });
     const run = await runTests(sandbox);
-    await emitTestRun(run);
+    await emitTestRun("agent tests", run);
     await options.onRun?.(run);
     if (run.ok || attempt === maxRuns) return { run, attempts: attempt };
     await emit({ type: "seller.step", step: "fix", detail: `${run.failed} failing, sending the real output back to the agent` });

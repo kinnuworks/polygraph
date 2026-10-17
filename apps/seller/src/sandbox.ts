@@ -1,4 +1,4 @@
-import { CreateosSandboxClient, type CreateSandboxRequest, type ForkSandboxRequest, type Sandbox } from "@nodeops-createos/sandbox";
+import { CreateosSandboxClient, CreateosSandboxRateLimitError, sleep, type CreateSandboxRequest, type ForkSandboxRequest, type Sandbox } from "@nodeops-createos/sandbox";
 import { PLATFORM_URL, emit } from "@polygraph/core";
 
 export const SHAPE = "s-2vcpu-4gb";
@@ -16,6 +16,22 @@ export interface ShellResult {
   stderr: string;
   exitCode: number;
   ms: number;
+}
+
+const QUOTA_RETRY_MS = 15_000;
+const QUOTA_RETRIES = 20;
+
+/** The account caps concurrent sandboxes (paused ones count), so a 429 means wait for a slot, not fail. */
+async function withQuotaRetry<T>(label: string, attempt: () => Promise<T>): Promise<T> {
+  for (let tries = 1; ; tries++) {
+    try {
+      return await attempt();
+    } catch (err) {
+      if (!(err instanceof CreateosSandboxRateLimitError) || tries >= QUOTA_RETRIES) throw err;
+      await emit({ type: "seller.step", step: "quota", detail: `${label}: sandbox quota full, retrying in ${QUOTA_RETRY_MS / 1000} s (${tries}/${QUOTA_RETRIES})` });
+      await sleep(QUOTA_RETRY_MS);
+    }
+  }
 }
 
 export function requireEnv(name: string): string {
@@ -71,7 +87,7 @@ export class SandboxRegistry {
   constructor(readonly client: CreateosSandboxClient) {}
 
   async create(role: string, request: CreateSandboxRequest): Promise<Sandbox> {
-    const sandbox = await this.client.createSandbox(request);
+    const sandbox = await withQuotaRetry(`create ${role}`, () => this.client.createSandbox(request));
     this.owned.set(sandbox.id, { sandbox, role, keep: false });
     await sandbox.waitUntilRunning({ timeoutMs: 120_000 });
     return sandbox;
@@ -79,7 +95,7 @@ export class SandboxRegistry {
 
   /** Forks a paused source and waits for the copy to be running. */
   async fork(source: Sandbox, role: string, request: ForkSandboxRequest = {}): Promise<Sandbox> {
-    const copy = await source.fork(request);
+    const copy = await withQuotaRetry(`fork ${role}`, () => source.fork(request));
     this.owned.set(copy.id, { sandbox: copy, role, keep: false });
     await copy.waitUntilRunning({ timeoutMs: 120_000 });
     return copy;
