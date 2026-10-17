@@ -46,7 +46,8 @@ function revoke(parentSandboxId: string, force = false): Promise<void> {
   });
 }
 
-function handOut(parentSandboxId: string): Promise<{ token: string; expiresAt: string }> {
+/** Issues a parent token on the same terms as GET /offers/:id/inspect: rotated in, revoked after the TTL. */
+export function handOut(parentSandboxId: string): Promise<{ token: string; expiresAt: string }> {
   return serialized(parentSandboxId, async () => {
     const token = await issueAccessToken(parentSandboxId);
     const previous = live.get(parentSandboxId);

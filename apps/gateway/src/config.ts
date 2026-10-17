@@ -38,6 +38,8 @@ export const config = {
   trustProxy: process.env.TRUST_PROXY === "1",
   /** Offers with a foil sidecar are listed only for demos. */
   demoFoils: process.env.DEMO_FOILS === "1",
+  /** POST /demo/tamper lets visitors create a tampered offer and watch the buyer's checks refuse it. */
+  demoTamper: process.env.DEMO_TAMPER === "1",
   /** Offers baked into the deployment. */
   offersDir: resolve(repoRoot, "data/offers"),
   /** Offers published at runtime through the publish API, and tombstones for removed ones. */

@@ -10,6 +10,7 @@ import { registerOfferRoutes } from "./offers.js";
 import { pooledWorkerIds } from "./pool.js";
 import { registerPublishRoutes } from "./publish.js";
 import { registerPurchaseRoutes } from "./purchase.js";
+import { registerTamperRoutes } from "./tamper.js";
 
 const app = new Hono();
 const startedAt = Date.now();
@@ -24,6 +25,7 @@ registerPublishRoutes(app);
 registerInspectRoutes(app);
 registerPurchaseRoutes(app);
 registerDiscoveryRoutes(app);
+registerTamperRoutes(app);
 
 app.use("/*", serveStatic({ root: config.webRoot }));
 

@@ -7,18 +7,28 @@ import { config } from "./config.js";
 /**
  * Offers come from two places: files baked into the deployment (data/offers, with an optional
  * <id>.foil.json sidecar) and offers published at runtime through the publish API (.runtime/offers).
- * They are merged when read; for an id present in both, the newer manifest wins. A foil flag is only
- * ever used to filter, never served.
+ * They are merged when read; for an id present in both, the newer manifest wins. A foil label is only
+ * ever used inside the gateway (to filter, and to replace a foil of the same kind), never served.
  */
 
 export const OFFER_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
 /** A runtime record: a published offer, or a tombstone that hides a baked offer of the same id. */
-type PublishedRecord = { offer: SignedManifest; foil: boolean; publishedAt: string } | { removed: true; removedAt: string };
+type PublishedRecord = { offer: SignedManifest; foil: string | boolean | null; publishedAt: string } | { removed: true; removedAt: string };
 
 interface Candidate {
   offer: SignedManifest;
-  foil: boolean;
+  /** The foil label, such as "lying-egress", or null for an honest offer. */
+  foil: string | null;
+}
+
+/** Older records stored only `true`; they are foils of unknown kind. */
+const foilLabel = (value: unknown): string | null => (typeof value === "string" && value ? value : value === true ? "foil" : null);
+
+async function readSidecarLabel(offerId: string): Promise<string | null> {
+  const path = join(config.offersDir, `${offerId}.foil.json`);
+  if (!(await exists(path))) return null;
+  return foilLabel(((await readJson(path)) as { foil?: unknown } | undefined)?.foil) ?? "foil";
 }
 
 export function isSignedManifest(value: unknown): value is SignedManifest {
@@ -73,14 +83,14 @@ async function readBaked(offerId: string): Promise<Candidate | null> {
     return null;
   }
   // Only the sidecar's existence is read, never its label.
-  return { offer: publicView(parsed), foil: await exists(join(config.offersDir, `${offerId}.foil.json`)) };
+  return { offer: publicView(parsed), foil: await readSidecarLabel(offerId) };
 }
 
 async function readPublished(offerId: string): Promise<PublishedRecord | null> {
   const parsed = (await readJson(join(config.publishedOffersDir, `${offerId}.json`))) as PublishedRecord | undefined;
   if (!parsed) return null;
   if ("removed" in parsed) return parsed;
-  return isSignedManifest(parsed.offer) ? { offer: publicView(parsed.offer), foil: parsed.foil === true, publishedAt: parsed.publishedAt } : null;
+  return isSignedManifest(parsed.offer) ? { offer: publicView(parsed.offer), foil: foilLabel(parsed.foil), publishedAt: parsed.publishedAt } : null;
 }
 
 const createdAt = (offer: SignedManifest) => Date.parse(offer.manifest.createdAt) || 0;
@@ -147,6 +157,13 @@ export async function offerParentIds(): Promise<Set<string>> {
   return parents;
 }
 
+/** Every current offer with its foil label, listed or not. For the gateway's own use; never serve the labels. */
+export async function offersWithLabels(): Promise<Candidate[]> {
+  const ids = [...new Set([...(await idsIn(config.offersDir)), ...(await idsIn(config.publishedOffersDir))])];
+  const found = await Promise.all(ids.map(resolve));
+  return found.filter((c): c is Candidate => c !== null);
+}
+
 async function writePublished(offerId: string, record: PublishedRecord): Promise<void> {
   await mkdir(config.publishedOffersDir, { recursive: true });
   const path = join(config.publishedOffersDir, `${offerId}.json`);
@@ -155,7 +172,7 @@ async function writePublished(offerId: string, record: PublishedRecord): Promise
 }
 
 /** Stores an offer published at runtime. The caller has checked the signature and price. */
-export async function storePublishedOffer(offer: SignedManifest, foil: boolean): Promise<void> {
+export async function storePublishedOffer(offer: SignedManifest, foil: string | null): Promise<void> {
   await writePublished(offer.manifest.offerId, { offer: publicView(offer), foil, publishedAt: new Date().toISOString() });
 }
 

@@ -44,7 +44,7 @@ export function registerPublishRoutes(app: Hono): void {
     if (!signature.valid) return c.json({ error: `signature check failed: ${signature.reason}` }, 422);
     if (!isChargeable(priceUsd)) return c.json({ error: `priceUsd must be a dollar amount of at least ${config.minPriceUsd.toFixed(2)}` }, 422);
 
-    await storePublishedOffer(offer, body?.foil !== undefined);
+    await storePublishedOffer(offer, typeof body?.foil === "string" ? body.foil : null);
     const listed = (await getOffer(offerId)) !== null;
     // A hidden foil is not announced, so the feed never shows an offer the list does not.
     if (listed) publish({ type: "offer.published", offer: publicView(offer) });

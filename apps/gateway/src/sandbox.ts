@@ -95,7 +95,8 @@ export async function reseedWorker(worker: Sandbox): Promise<{ bootId: string }>
 }
 
 /**
- * Destroys a worker, given its handle or id; one that is already gone counts as destroyed.
+ * Destroys a sandbox the gateway owns (a worker, or a demo foil's parent), given its handle or id; one
+ * that is already gone counts as destroyed.
  * With `untilGone`, waits for CreateOS to finish, which is when its slot in the account quota frees up.
  */
 export async function destroyWorker(worker: Sandbox | string, { untilGone = false } = {}): Promise<void> {
