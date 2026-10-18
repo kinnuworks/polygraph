@@ -8,7 +8,7 @@ The lie detector for AI agents.
 
 AI agents now pay for tools on their own, one HTTP request at a time. They have no good way to tell whether the service they are paying is the one it claims to be. Polygraph is a working answer for one kind of service: an open-source tool run in a sandbox. A seller agent packages the tool and offers it for sale. A buyer agent checks every claim the seller makes against CreateOS's own records before any money moves, refuses offers that don't match, pays with Stripe, and then runs its job inside the exact sandbox it checked.
 
-**Live:** https://production-polygraph.tyzo.nodeops.app (gateway and live console) · **Video:** [youtu.be/FiD6RquSaj0](https://youtu.be/FiD6RquSaj0) · **Leaderboard:** [projects.dev/vote/polygraph](https://projects.dev/vote/polygraph) · **Evidence:** [docs/runs](docs/runs/README.md) · **For agents:** [/llms.txt](https://production-polygraph.tyzo.nodeops.app/llms.txt), [/openapi.json](https://production-polygraph.tyzo.nodeops.app/openapi.json)
+**Live:** https://production-polygraph.tyzo.nodeops.app (gateway and live console) · **Video:** [youtu.be/FiD6RquSaj0](https://youtu.be/FiD6RquSaj0) · **Post:** [on X](https://x.com/heykinnu/status/2111617787328401514) · **Leaderboard:** [projects.dev/vote/polygraph](https://projects.dev/vote/polygraph) · **Evidence:** [docs/runs](docs/runs/README.md) · **For agents:** [/llms.txt](https://production-polygraph.tyzo.nodeops.app/llms.txt), [/openapi.json](https://production-polygraph.tyzo.nodeops.app/openapi.json)
 
 **6 of 6 dishonest offers refused on the live gateway · 5 before any payment existed · the seller agent's tool passes 17 of 17 hidden tests, plain LibreOffice 14 of 17**
 
