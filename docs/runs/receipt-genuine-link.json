@@ -1,0 +1,152 @@
+{
+  "purchaseId": "pur_d9bad5b8-e2f6-454b-8ee0-79852759a73e",
+  "offerId": "offer_7c9e27eca00f",
+  "paymentIntentId": "pi_3URhcNQwaSeLdSm40X1GjUTu",
+  "artifactDigest": "e1413d162ed3da48075bf9aa4788bcd623e745d17a2f7f14ee1d0b5a5c13ad51",
+  "parentSandboxId": "sb-01m55xnadd6p0d29vvsxx1ynnj",
+  "workerSandboxId": "sb-01m5653cnme048ejes6pdhd5nb",
+  "verification": [
+    {
+      "id": "signature",
+      "label": "Seller signature covers this manifest",
+      "status": "pass",
+      "detail": "key SHA256:NyqDEQK6vjCwgXEP…"
+    },
+    {
+      "id": "seller-key",
+      "label": "Seller key fingerprint (not pinned)",
+      "status": "pass",
+      "detail": "SHA256:NyqDEQK6vjCwgXEP8v30B9VnnbozwOykm2bo_vG-Xec · pin it with --trust-seller"
+    },
+    {
+      "id": "parent-exists",
+      "label": "Parent sandbox exists",
+      "status": "pass",
+      "detail": "sb-01m55xnadd6p0d29vvsxx1ynnj found on CreateOS (devbox:1)"
+    },
+    {
+      "id": "parent-paused",
+      "label": "Parent is paused",
+      "status": "pass",
+      "detail": "CreateOS status: paused"
+    },
+    {
+      "id": "egress-claim",
+      "label": "Egress matches the signed claim",
+      "status": "pass",
+      "detail": "claimed [127.0.0.1:9] · CreateOS [127.0.0.1:9]"
+    },
+    {
+      "id": "egress-locked",
+      "label": "Egress is deny-by-default",
+      "status": "pass",
+      "detail": "1 allowed, everything else blocked by CreateOS"
+    },
+    {
+      "id": "grant-offer",
+      "label": "Grant is for the offer paid for",
+      "status": "pass",
+      "detail": "grant offer_7c9e27eca00f · paid offer_7c9e27eca00f"
+    },
+    {
+      "id": "receipt",
+      "label": "Payment receipt matches the grant",
+      "status": "pass",
+      "detail": "receipt pi_3URhcNQwaSeLdSm40X1GjUTu · grant pi_3URhcNQwaSeLdSm40X1GjUTu"
+    },
+    {
+      "id": "platform",
+      "label": "Grant names the trusted CreateOS API",
+      "status": "pass",
+      "detail": "grant https://api-eu.sb.createos.sh · buyer https://api-eu.sb.createos.sh"
+    },
+    {
+      "id": "worker-exists",
+      "label": "Worker is visible with its token",
+      "status": "pass",
+      "detail": "sb-01m5653cnme048ejes6pdhd5nb (devbox:1)"
+    },
+    {
+      "id": "worker-lineage",
+      "label": "Worker was forked from the signed parent",
+      "status": "pass",
+      "detail": "forked_from sb-01m55xnadd6p0d29vvsxx1ynnj · signed parent sb-01m55xnadd6p0d29vvsxx1ynnj"
+    },
+    {
+      "id": "worker-egress",
+      "label": "Worker egress matches the signed claim",
+      "status": "pass",
+      "detail": "claimed [127.0.0.1:9] · CreateOS [127.0.0.1:9]"
+    },
+    {
+      "id": "worker-running",
+      "label": "Worker is running",
+      "status": "pass",
+      "detail": "CreateOS status: running"
+    },
+    {
+      "id": "artifact-digest-local",
+      "label": "Tool files hashed by the buyer match the signed digest",
+      "status": "pass",
+      "detail": "4 files, 28007 bytes · signed e1413d162ed3da48… · buyer e1413d162ed3da48…"
+    },
+    {
+      "id": "artifact-digest",
+      "label": "Tool digest computed in the worker matches",
+      "status": "pass",
+      "detail": "signed e1413d162ed3da48… · worker e1413d162ed3da48…"
+    },
+    {
+      "id": "system-packages",
+      "label": "LibreOffice packages are unmodified",
+      "status": "pass",
+      "detail": "16 packages match dpkg checksums, 34 doc/man files absent as on the stock image"
+    },
+    {
+      "id": "python-hooks",
+      "label": "No added Python startup hooks",
+      "status": "pass",
+      "detail": "3 hook files, all stock and unchanged"
+    },
+    {
+      "id": "upload-intact",
+      "label": "Uploaded document is intact",
+      "status": "pass",
+      "detail": "sha256 148c10d7e1b56083… local · 148c10d7e1b56083… worker"
+    },
+    {
+      "id": "convert-exit",
+      "label": "Converter finished cleanly",
+      "status": "pass",
+      "detail": "exit 0 in 1783 ms"
+    },
+    {
+      "id": "output-found",
+      "label": "Converter produced a PDF",
+      "status": "pass",
+      "detail": "/tmp/polygraph-job/out/contract.pdf"
+    },
+    {
+      "id": "pdf-header",
+      "label": "Output is a PDF",
+      "status": "pass",
+      "detail": "starts with \"%PDF-\", 67837 bytes"
+    },
+    {
+      "id": "pdf-pages",
+      "label": "PDF has pages",
+      "status": "pass",
+      "detail": "2 pages (pdfinfo)"
+    },
+    {
+      "id": "pdf-text",
+      "label": "PDF carries a text layer",
+      "status": "pass",
+      "detail": "font resources present"
+    }
+  ],
+  "inputSha256": "148c10d7e1b560836b94d060076744557d6cb56596b593fbd534b46883ea7a65",
+  "outputSha256": "4a776d811d247f24d629e4a8004408a8d7cf480887772433bab25ffcd97f4b93",
+  "completedAt": "2026-10-18T00:06:39.316Z",
+  "mode": "seller-worker"
+}

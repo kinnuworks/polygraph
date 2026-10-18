@@ -1,0 +1,5 @@
+# PDF/A check of the PDF returned to the buyer in the genuine Link purchase (pi_3URhcNQwaSeLdSm40X1GjUTu)
+sha256 4a776d811d247f24d629e4a8004408a8d7cf480887772433bab25ffcd97f4b93
+pages 2
+xmp pdfaid:part = 2
+xmp pdfaid:conformance = B

@@ -1,14 +1,30 @@
 # Polygraph
 
-**Your agent checks before it pays.** Polygraph asks CreateOS, not the seller.
+**Your agent checks before it pays.** Polygraph checks a seller's signed claims against CreateOS's own records, then pays through Stripe.
+
+![A buyer agent refuses a dishonest offer before any payment exists](docs/hero.png)
 
 AI agents now pay for tools on their own, one HTTP request at a time. They have no good way to tell whether the service they are paying is the one it claims to be. Polygraph is a working answer for one kind of service: an open-source tool run in a sandbox. A seller agent packages the tool and offers it for sale. A buyer agent checks every claim the seller makes against CreateOS's own records before any money moves, refuses offers that don't match, pays with Stripe, and then runs its job inside the exact sandbox it checked.
 
-**Live:** https://production-polygraph.tyzo.nodeops.app (gateway and live console) · **Video:** [link coming] · **For agents:** [/llms.txt](https://production-polygraph.tyzo.nodeops.app/llms.txt), [/openapi.json](https://production-polygraph.tyzo.nodeops.app/openapi.json)
+**Live:** https://production-polygraph.tyzo.nodeops.app (gateway and live console) · **Leaderboard:** [projects.dev/vote/polygraph](https://projects.dev/vote/polygraph) · **Evidence:** [docs/runs](docs/runs/README.md) · **For agents:** [/llms.txt](https://production-polygraph.tyzo.nodeops.app/llms.txt), [/openapi.json](https://production-polygraph.tyzo.nodeops.app/openapi.json)
 
 **6 of 6 dishonest offers refused on the live gateway · 5 before any payment existed · the seller agent's tool passes 17 of 17 hidden tests, plain LibreOffice 14 of 17**
 
 **Who needs this.** Any agent platform or agent wallet that lets agents pay for tools needs proof that the tool it paid for is the one it checked. Polygraph is that check, sitting between the buyer and the payment. It could charge a small fee per verified purchase, or a marketplace could run it on every listing. The document converter here is the first listing, not the product.
+
+**Why not just trust the marketplace?** Other marketplaces verify a tool once and ask buyers to trust the marketplace. In Polygraph the buyer trusts neither the seller nor the gateway: it asks CreateOS directly, with a short-lived token scoped to one sandbox, whether that sandbox is paused, forked from the signed parent and locked down on the network, and it checks again after paying. A gateway that says "verified" would be grading itself.
+
+## Try it in 60 seconds
+
+1. Open the [live console](https://production-polygraph.tyzo.nodeops.app/?console=1) and press **Replay** to watch a recorded seller and buyer run.
+2. See what an agent sees. The test foils are listed on purpose, so you can watch a buyer refuse them:
+   ```bash
+   curl -s https://production-polygraph.tyzo.nodeops.app/offers | jq '.[].manifest | {offerId, name, egress, parentSandboxId}'
+   ```
+3. With your own keys (see [Run it](#run-it)), run the buyer agent against the live gateway:
+   ```bash
+   npm run buyer -- --file apps/buyer/fixtures/contract.docx --gateway https://production-polygraph.tyzo.nodeops.app --trust-seller
+   ```
 
 In three lines:
 - A seller agent writes a document converter, tests it in a CreateOS sandbox, fixes what fails, locks the network and signs an offer.
@@ -108,7 +124,7 @@ They don't prove everything. The worker lives in the seller's CreateOS account, 
 
 | Tool | Use |
 |---|---|
-| Stripe Projects | `stripe projects init`, `stripe projects add createos/free` and `createos/project` provision the CreateOS account and the deploy target and write their credentials to `.env` |
+| Stripe Projects ([status](docs/runs/stripe-projects-status.txt); `.projects/state.json` is committed with ids only) | `stripe projects init`, `stripe projects add createos/free` and `createos/project` provision the CreateOS account and the deploy target and write their credentials to `.env` |
 | Stripe machine payments (MPP) | The 402 challenge and payment on `POST /offers/:id/buy`, card payments through shared payment tokens |
 | Link agent wallet | `--pay link` pays with `link-cli` and a phone approval |
 | Stripe PaymentIntent metadata and refunds | Proof ids on every charge; automatic refunds when a worker fails or a check fails after payment |
