@@ -1,0 +1,81 @@
+# Gateway: current master on a local machine (http://localhost:4350), real CreateOS sandboxes, real Stripe test mode, real Link wallet with phone approval
+# Attempt 1: paid via Link, worker not running within 45 s, gateway refunded and kept the worker warm
+[buyer.step] start · contract.docx · gateway http://localhost:4350 · pay link · mode worker
+[buyer.step] discover · reading http://localhost:4350/llms.txt, /openapi.json and /offers
+[buyer.step] discovered · Polygraph gateway · $0.50 · 1 offers
+[buyer.step] verify-offer · offer_7c9e27eca00f · Document to PDF (LibreOffice) · $0.50
+[buyer.check] PASS Seller signature covers this manifest · key SHA256:NyqDEQK6vjCwgXEP…
+[buyer.check] PASS Seller key fingerprint (not pinned) · SHA256:NyqDEQK6vjCwgXEP8v30B9VnnbozwOykm2bo_vG-Xec · pin it with --trust-seller
+[buyer.check] PASS Parent sandbox exists · sb-01m55xnadd6p0d29vvsxx1ynnj found on CreateOS (devbox:1)
+[buyer.check] PASS Parent is paused · CreateOS status: paused
+[buyer.check] PASS Egress matches the signed claim · claimed [127.0.0.1:9] · CreateOS [127.0.0.1:9]
+[buyer.check] PASS Egress is deny-by-default · 1 allowed, everything else blocked by CreateOS
+[buyer.step] pay · $0.50 for offer_7c9e27eca00f via Link wallet (needs approval in the Link app)
+[buyer.step] awaiting-approval · approve lsrq_1URhXU2MTaK9i47G9DLsFTvE in the Link app: https://app.link.com/activity/approve/lsrq_1URhXU2MTaK9i47G9DLsFTvE
+[buyer.step] payment-failed · offer_7c9e27eca00f · gateway answered HTTP 503 after payment (gateway reports a refund): {"error":"worker did not start within 45 s; it is kept warm for a retry","refunded":true,"paymentIntentId":"pi_3URhZ3QwaSeLdSm40g7ibkJW","retryAfter":30}
+[buyer.step] no-purchase · no offer passed verification and delivered
+
+Offers
+offer               price  outcome  evidence
+──────────────────  ─────  ───────  ────────────────────────────────────────────────────────────────────────
+offer_7c9e27eca00f  $0.50  failed   gateway answered HTTP 503 after payment (gateway reports a refund): {"e…
+
+
+# Attempt 2: paid via Link, claimed the warm worker, job completed
+[buyer.step] start · contract.docx · gateway http://localhost:4350 · pay link · mode worker
+[buyer.step] discover · reading http://localhost:4350/llms.txt, /openapi.json and /offers
+[buyer.step] discovered · Polygraph gateway · $0.50 · 1 offers
+[buyer.step] verify-offer · offer_7c9e27eca00f · Document to PDF (LibreOffice) · $0.50
+[buyer.check] PASS Seller signature covers this manifest · key SHA256:NyqDEQK6vjCwgXEP…
+[buyer.check] PASS Seller key fingerprint (not pinned) · SHA256:NyqDEQK6vjCwgXEP8v30B9VnnbozwOykm2bo_vG-Xec · pin it with --trust-seller
+[buyer.check] PASS Parent sandbox exists · sb-01m55xnadd6p0d29vvsxx1ynnj found on CreateOS (devbox:1)
+[buyer.check] PASS Parent is paused · CreateOS status: paused
+[buyer.check] PASS Egress matches the signed claim · claimed [127.0.0.1:9] · CreateOS [127.0.0.1:9]
+[buyer.check] PASS Egress is deny-by-default · 1 allowed, everything else blocked by CreateOS
+[buyer.step] pay · $0.50 for offer_7c9e27eca00f via Link wallet (needs approval in the Link app)
+[buyer.step] awaiting-approval · approve lsrq_1URhad2MTaK9i47GT698pcJL in the Link app: https://app.link.com/activity/approve/lsrq_1URhad2MTaK9i47GT698pcJL
+[buyer.step] paid · pi_3URhcNQwaSeLdSm40X1GjUTu · worker sb-01m5653cnme048ejes6pdhd5nb
+[buyer.step] verify-worker · sb-01m5653cnme048ejes6pdhd5nb · purchase pur_d9bad5b8-e2f6-454b-8ee0-79852759a73e
+[buyer.check] PASS Grant is for the offer paid for · grant offer_7c9e27eca00f · paid offer_7c9e27eca00f
+[buyer.check] PASS Payment receipt matches the grant · receipt pi_3URhcNQwaSeLdSm40X1GjUTu · grant pi_3URhcNQwaSeLdSm40X1GjUTu
+[buyer.check] PASS Grant names the trusted CreateOS API · grant https://api-eu.sb.createos.sh · buyer https://api-eu.sb.createos.sh
+[buyer.check] PASS Worker is visible with its token · sb-01m5653cnme048ejes6pdhd5nb (devbox:1)
+[buyer.check] PASS Worker was forked from the signed parent · forked_from sb-01m55xnadd6p0d29vvsxx1ynnj · signed parent sb-01m55xnadd6p0d29vvsxx1ynnj
+[buyer.check] PASS Worker egress matches the signed claim · claimed [127.0.0.1:9] · CreateOS [127.0.0.1:9]
+[buyer.check] PASS Worker is running · CreateOS status: running
+[buyer.check] PASS Tool files hashed by the buyer match the signed digest · 4 files, 28007 bytes · signed e1413d162ed3da48… · buyer e1413d162ed3da48…
+[buyer.check] PASS Tool digest computed in the worker matches · signed e1413d162ed3da48… · worker e1413d162ed3da48…
+[buyer.check] PASS LibreOffice packages are unmodified · 16 packages match dpkg checksums, 34 doc/man files absent as on the stock image
+[buyer.check] PASS No added Python startup hooks · 3 hook files, all stock and unchanged
+[buyer.step] upload · contract.docx (4136 bytes) to sb-01m5653cnme048ejes6pdhd5nb
+[buyer.check] PASS Uploaded document is intact · sha256 148c10d7e1b56083… local · 148c10d7e1b56083… worker
+[buyer.step] convert · python3 /opt/tool/convert.py /tmp/polygraph-job/in/contract.docx /tmp/polygraph-job/out
+[buyer.check] PASS Converter finished cleanly · exit 0 in 1783 ms
+[buyer.check] PASS Converter produced a PDF · /tmp/polygraph-job/out/contract.pdf
+[buyer.check] PASS Output is a PDF · starts with "%PDF-", 67837 bytes
+[buyer.check] PASS PDF has pages · 2 pages (pdfinfo)
+[buyer.check] PASS PDF carries a text layer · font resources present
+[buyer.step] downloaded · ./buylink-local/contract.pdf · 2 pages · 67837 bytes
+[job.completed] job done · output 4a776d811d24
+[buyer.step] released · pur_d9bad5b8-e2f6-454b-8ee0-79852759a73e
+
+Offers
+offer               price  outcome    evidence
+──────────────────  ─────  ─────────  ────────────────
+offer_7c9e27eca00f  $0.50  completed  23 checks passed
+
+Job
+field            value
+───────────────  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+purchase         pur_d9bad5b8-e2f6-454b-8ee0-79852759a73e
+payment          pi_3URhcNQwaSeLdSm40X1GjUTu · $0.50
+mode             seller worker
+parent sandbox   sb-01m55xnadd6p0d29vvsxx1ynnj
+worker sandbox   sb-01m5653cnme048ejes6pdhd5nb
+artifact digest  e1413d162ed3da48075bf9aa4788bcd623e745d17a2f7f14ee1d0b5a5c13ad51
+input sha256     148c10d7e1b560836b94d060076744557d6cb56596b593fbd534b46883ea7a65
+output sha256    4a776d811d247f24d629e4a8004408a8d7cf480887772433bab25ffcd97f4b93
+pdf              2 pages · 67837 bytes · converted in 1783 ms
+output           ./buylink-local/contract.pdf
+receipt          ./buylink-local/contract.rec…
+
