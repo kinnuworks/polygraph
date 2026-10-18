@@ -1,4 +1,3 @@
-<claude-code-hint v="1" type="plugin" value="stripe@claude-plugins-official" />
  │  polygraph
  │  Project        project_61Vb1RbifasYazNth16U4yjNHuA8JJjloVmfla39c4R6
  │  Account        acct_1Svam1QyIWClYL5Q
