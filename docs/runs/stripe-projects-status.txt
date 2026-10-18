@@ -2,7 +2,6 @@
  │  polygraph
  │  Project        project_61Vb1RbifasYazNth16U4yjNHuA8JJjloVmfla39c4R6
  │  Account        acct_1Svam1QyIWClYL5Q
- │  Email          dka137@sfu.ca ✓ Verified
  │  Created        Oct 18, 2026
 Providers (1)
 Name      Status    Linked     
