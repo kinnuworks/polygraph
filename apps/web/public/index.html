@@ -40,6 +40,7 @@
       </a>
       <div class="nav__links">
         <a href="#how">How it works</a>
+        <a href="#who">Who it's for</a>
         <a href="#console">Live console</a>
         <a href="#receipts">Receipts</a>
       </div>
@@ -51,8 +52,8 @@
     <section class="hero">
       <div class="container hero__text">
         <span class="badge badge--dot">Built on CreateOS Sandbox and Stripe machine payments</span>
-        <h1>Don't trust the seller. Ask the <span class="hl">platform</span>.</h1>
-        <p class="lead">Polygraph checks a seller's claims against CreateOS's own records before your agent pays. If one is false, the agent refuses and no payment is created.</p>
+        <h1>Your agent checks <span class="hl">before</span> it pays.</h1>
+        <p class="lead">Polygraph asks CreateOS, not the seller. Every claim in a seller's offer is checked against the platform's own records before your agent pays. If one is false, the agent refuses and no payment is created.</p>
         <p class="audience">For AI agents that need heavy software they can't install, like archival PDF conversion with LibreOffice, from sellers they've never met.</p>
         <div class="cta-row">
           <a class="btn btn-candy btn-lg" href="#console">Watch it live
@@ -218,11 +219,44 @@
             <p class="proof__row"><span class="proof__name">The seller agent's tool</span><span class="proof__score">17 of 17 <small>PDF/A-2b</small></span></p>
           </div>
           <div class="proof__item">
+            <p class="proof__label">Attacked on the live gateway</p>
+            <p class="proof__stat"><span class="t-mono">6</span> of <span class="t-mono">6</span> dishonest offers refused, <span class="t-mono">5</span> before any payment existed.</p>
+            <p class="proof__source">docs/runs/tamper-matrix.json</p>
+          </div>
+          <div class="proof__item">
             <p class="proof__label">Why a buyer should doubt</p>
             <p class="proof__stat"><span class="t-mono">161</span> of <span class="t-mono">20,338</span> paid agent endpoints were traps.</p>
             <p class="proof__source">dev.to/afx, 2026</p>
           </div>
         </div>
+      </div>
+    </section>
+
+    <section class="section" id="who">
+      <div class="container">
+        <div class="section-head">
+          <span class="eyebrow"><span class="dot"></span>Who needs this</span>
+          <h2 class="t-h3">Anyone who lets agents spend money on tools.</h2>
+          <p class="lead">An agent that pays a stranger needs proof that the tool it paid for is the one it checked. Polygraph is that check, between the buyer and the payment. The document converter is the first listing, not the product.</p>
+        </div>
+        <ol class="steps">
+          <li class="step reveal" style="--i:0">
+            <span class="icon-tile"><svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-card"/></svg></span>
+            <h3 class="t-title">Agent wallets and platforms</h3>
+            <p>Run the check before releasing a payment, so an agent never pays for a sandbox that isn't what it claims.</p>
+          </li>
+          <li class="step reveal" style="--i:1">
+            <span class="icon-tile"><svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-shield"/></svg></span>
+            <h3 class="t-title">Tool marketplaces</h3>
+            <p>Verify every listing against the platform's records, and refund automatically when a seller changes something after the sale.</p>
+          </li>
+          <li class="step reveal" style="--i:2">
+            <span class="icon-tile"><svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-term"/></svg></span>
+            <h3 class="t-title">Sellers with nothing to hide</h3>
+            <p>A sealed test suite, a locked network and a signed offer give honest sellers a way to prove it to buyers they've never met.</p>
+          </li>
+        </ol>
+        <p class="t-small" style="margin-top:20px">How it could earn: a small fee per verified purchase, or a cut when a marketplace runs it on every listing.</p>
       </div>
     </section>
 
