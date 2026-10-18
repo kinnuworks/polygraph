@@ -1,5 +1,7 @@
 # Polygraph
 
+The lie detector for AI agents.
+
 **Your agent checks before it pays.** Polygraph checks a seller's signed claims against CreateOS's own records, then pays through Stripe.
 
 ![A buyer agent refuses a dishonest offer before any payment exists](docs/hero.png)
